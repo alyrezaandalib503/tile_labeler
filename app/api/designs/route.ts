@@ -14,6 +14,7 @@ export async function GET() {
                 updatedAt: true,
                 mainImage: true,
                 faceCount: true,
+                images : {},
                 labels: {
                     select: {
                         labelValue: {

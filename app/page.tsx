@@ -30,6 +30,9 @@ export default function Home() {
     const [mainPreview, setMainPreview] = useState<string | null>(null);
     const [faces, setFaces] = useState<DesignFace[]>([]);
     const [selectedLabelValueIds, setSelectedLabelValueIds] = useState<number[]>([]);
+    // --- برای حذف و ویرایش طرح ---
+    const [editingDesign, setEditingDesign] = useState<any | null>(null);
+    const [deleteDesignId, setDeleteDesignId] = useState<number | null>(null);
 
     // ---------- Handlers ----------
 
@@ -108,6 +111,29 @@ export default function Home() {
             const errorMessage = error?.response?.data?.error || error?.response?.data?.details || "ثبت طرح با خطا مواجه شد";
             toast.error(errorMessage);
         }
+    };
+
+    // Design delete
+    const handleDeleteDesign = async (id: number) => {
+        try {
+            await deleteDesign.mutateAsync(id);
+            toast.success("طرح با موفقیت حذف شد 🗑️");
+            DesignRefetch();
+            setDeleteDesignId(null);
+        } catch (error: any) {
+            console.error(error);
+            const message = error?.response?.data?.error || "خطا در حذف طرح";
+            toast.error(message);
+        }
+    };
+
+    // Design Edit
+    const handleEditDesign = (design: any) => {
+        // setEditingDesignId(design.id);
+        setDesignName(design.name);
+        setMainPreview(design.mainImage);
+        setSelectedLabelValueIds(design.labels.map((l: any) => l.labelValueId));
+        toast("حالت ویرایش فعال شد 📝", {icon: "✏️"});
     };
 
     // ---------- Render ----------
@@ -278,9 +304,7 @@ export default function Home() {
                                                             }
                                                         }}
                                                     />
-                                                    <span className="text-sm">
-                      {value.faName} ({value.enName})
-                    </span>
+                                                    <span className="text-sm">{value.faName} ({value.enName})</span>
                                                 </label>
                                             ))}
                                         </div>
@@ -292,7 +316,7 @@ export default function Home() {
                     {/* Save Button */}
                     <div className="flex justify-end mt-6">
                         <button onClick={handleSaveDesign} className="btn btn-primary px-6">
-                          ایجاد طرح جدید
+                            ایجاد طرح جدید
                         </button>
                     </div>
                 </div>
@@ -330,7 +354,7 @@ export default function Home() {
                                         {design.labels.map((label: any, i: number) => (
                                             <div
                                                 key={i}
-                                                className="badge badge-soft badge-info text-xs"
+                                                className="badge badge-soft badge-info text-xs text-nowrap"
                                             >
                                                 {`${label.labelValue.enName} (${label.labelValue.faName})`}
                                             </div>
@@ -339,10 +363,16 @@ export default function Home() {
                                     <td>{toJalali(design.createdAt)}</td>
                                     <td>{toJalali(design.updatedAt)}</td>
                                     <td className="flex gap-2">
-                                        <button className="btn btn-square btn-ghost text-blue-500">
+                                        <button
+                                            className="btn btn-square btn-ghost text-blue-500"
+                                            onClick={() => handleEditDesign(design)}
+                                        >
                                             <CiEdit className="text-lg"/>
                                         </button>
-                                        <button className="btn btn-square btn-ghost text-red-500">
+                                        <button
+                                            className="btn btn-square btn-ghost text-red-500"
+                                            onClick={() => setDeleteDesignId(design.id)}
+                                        >
                                             <FaTrash size={13}/>
                                         </button>
                                     </td>
@@ -355,21 +385,52 @@ export default function Home() {
 
 
             {/* ---------- Delete Modal ---------- */}
-            <input type="checkbox" id="delete-modal" className="modal-toggle" checked={deleteConfirmId !== null}
-                   readOnly/>
+            <input
+                type="checkbox"
+                id="delete-modal"
+                className="modal-toggle"
+                checked={deleteConfirmId !== null || deleteDesignId !== null}
+                readOnly
+            />
             <div className="modal">
                 <div className="modal-box">
-                    <h3 className="font-bold text-lg">حذف لیبل</h3>
-                    <p className="py-4 text-gray-600">آیا مطمئن هستید که می‌خواهید این لیبل را حذف کنید؟ این عمل قابل
-                        بازگشت نیست.</p>
+                    <h3 className="font-bold text-lg">
+                        حذف {deleteDesignId ? "طرح" : "لیبل"}
+                    </h3>
+                    <p className="py-4 text-gray-600">
+                        آیا مطمئن هستید که می‌خواهید این مورد را حذف کنید؟ این عمل قابل بازگشت نیست.
+                    </p>
                     <div className="modal-action">
-                        <button className="btn btn-ghost" onClick={() => setDeleteConfirmId(null)}>انصراف</button>
-                        <button className="btn btn-error"
-                                onClick={() => deleteConfirmId && handleDeleteLabel(deleteConfirmId)}>حذف
+                        <button
+                            className="btn btn-ghost"
+                            onClick={() => {
+                                setDeleteConfirmId(null);
+                                setDeleteDesignId(null);
+                            }}
+                        >
+                            انصراف
+                        </button>
+                        <button
+                            className="btn btn-error"
+                            onClick={() => {
+                                if (deleteConfirmId) handleDeleteLabel(deleteConfirmId);
+                                if (deleteDesignId) {
+                                    deleteDesign.mutate(deleteDesignId, {
+                                        onSuccess: () => {
+                                            toast.success("طرح با موفقیت حذف شد");
+                                            DesignRefetch();
+                                            setDeleteDesignId(null);
+                                        },
+                                    });
+                                }
+                            }}
+                        >
+                            حذف
                         </button>
                     </div>
                 </div>
             </div>
+
 
             {/* ---------- Edit Label Modal ---------- */}
             <input type="checkbox" id="update-modal" className="modal-toggle" checked={editingLabel !== null} readOnly/>
@@ -430,6 +491,113 @@ export default function Home() {
                     </div>
                 </div>
             </div>
+
+            {/* ---------- Edit Design Modal ---------- */}
+            <input
+                type="checkbox"
+                id="update-design-modal"
+                className="modal-toggle"
+                checked={editingDesign !== null}
+                readOnly
+            />
+            <div className="modal">
+                <div className="modal-box max-w-3xl">
+                    <h3 className="font-bold text-xl mb-4">ویرایش طرح</h3>
+                    {editingDesign && (
+                        <div className="space-y-4">
+                            <input
+                                type="text"
+                                className="input input-bordered w-full"
+                                value={editingDesign.name}
+                                onChange={(e) =>
+                                    setEditingDesign({ ...editingDesign, name: e.target.value })
+                                }
+                                placeholder="نام طرح"
+                            />
+
+                            {/* تصویر فعلی */}
+                            <div className="flex items-center gap-4">
+                                <img
+                                    src={editingDesign.mainImage}
+                                    alt="main"
+                                    className="w-24 h-24 rounded-lg object-cover border"
+                                />
+                                <label className="btn btn-outline btn-primary cursor-pointer">
+                                    تغییر تصویر
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            if (!e.target.files?.[0]) return;
+                                            const file = e.target.files[0];
+                                            setEditingDesign({
+                                                ...editingDesign,
+                                                newMainImage: file,
+                                                mainImagePreview: URL.createObjectURL(file),
+                                            });
+                                        }}
+                                    />
+                                </label>
+                            </div>
+
+                            {/* فیس‌ها */}
+                            <div>
+                                <p className="font-medium mb-2">تعداد فیس‌ها: {editingDesign.faceCount}</p>
+                                <label className="btn btn-outline btn-primary cursor-pointer">
+                                    افزودن فیس جدید
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            if (!e.target.files) return;
+                                            const files = Array.from(e.target.files);
+                                            setEditingDesign({
+                                                ...editingDesign,
+                                                newFaces: files,
+                                            });
+                                        }}
+                                    />
+                                </label>
+                            </div>
+                        </div>
+                    )}
+                    <div className="modal-action mt-4">
+                        <button
+                            className="btn btn-ghost"
+                            onClick={() => setEditingDesign(null)}
+                        >
+                            انصراف
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            onClick={async () => {
+                                if (!editingDesign) return;
+                                const formData = new FormData();
+                                formData.append("id", editingDesign.id);
+                                formData.append("name", editingDesign.name);
+                                if (editingDesign.newMainImage)
+                                    formData.append("mainImage", editingDesign.newMainImage);
+                                if (editingDesign.newFaces) {
+                                    editingDesign.newFaces.forEach((file: File) =>
+                                        formData.append("faces", file)
+                                    );
+                                }
+
+                                await upsertDesign.mutateAsync(formData);
+                                toast.success("تغییرات طرح ذخیره شد ✅");
+                                setEditingDesign(null);
+                                DesignRefetch();
+                            }}
+                        >
+                            ذخیره تغییرات
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     );
 }

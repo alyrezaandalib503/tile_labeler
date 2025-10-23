@@ -11,19 +11,22 @@ export function useService() {
             const res = await axios.get("/api/labels");
             return res.data;
         },
-        enabled: true,
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
+        // enabled: false,
     });
 
     const updateLabel = useMutation({
         mutationFn: async (label: Label) => {
-            const res = await axios.put("/api/labels", label); // id داخل body
+            const res = await axios.put("/api/labels", label);
             return res.data;
         },
     });
 
     const deleteLabel = useMutation({
         mutationFn: async (id: number) => {
-            const res = await axios.delete("/api/labels", { data: { id } }); // id داخل body
+            const res = await axios.delete("/api/labels", { data: { id } });
             return res.data;
         },
     });
@@ -35,6 +38,9 @@ export function useService() {
             const res = await axios.get("/api/designs");
             return res.data as Design[];
         },
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        refetchOnMount: false,
     });
 
     // CREATE or UPDATE a design
