@@ -13,10 +13,12 @@ import type {Label, DesignFace} from "@/app/type";
 
 // services
 import {useService} from "@/app/service";
+import {toJalali} from "@/utils/toJalali";
 
 export default function Home() {
-    const {getLabels, deleteLabel, updateLabel , deleteDesign , getDesigns , upsertDesign} = useService();
-    const {data, isLoading, isError, refetch} = getLabels;
+    const {getLabels, deleteLabel, updateLabel, deleteDesign, getDesigns, upsertDesign} = useService();
+    const {data: LabelsData, isLoading: LabelsIsLoading, isError: LabelsIsError, refetch: LabelsRefetch} = getLabels;
+    const {data: DesignData, isLoading: DesignIsLoading, isError: DesignIsError, refetch: DesignRefetch} = getDesigns;
 
     // Label editing & deletion
     const [editingLabel, setEditingLabel] = useState<Label | null>(null);
@@ -40,7 +42,7 @@ export default function Home() {
             {...label, values: cleanedValues},
             {
                 onSuccess: () => {
-                    refetch();
+                    LabelsRefetch();
                     setEditingLabel(null);
                 }
             }
@@ -51,7 +53,7 @@ export default function Home() {
     const handleDeleteLabel = (id: number) => {
         deleteLabel.mutate(id, {
             onSuccess: () => {
-                refetch();
+                LabelsRefetch();
                 setDeleteConfirmId(null);
             },
         });
@@ -93,6 +95,7 @@ export default function Home() {
             await upsertDesign.mutateAsync(formData);
 
             toast.success("طرح با موفقیت ثبت شد 🎉");
+            DesignRefetch()
 
             setDesignName("");
             setMainImage(null);
@@ -107,145 +110,249 @@ export default function Home() {
         }
     };
 
-
     // ---------- Render ----------
     return (
         <div className="bg-gray-100 min-h-screen w-full">
             <Header/>
 
-            <div className="container mx-auto px-8 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="container mx-auto px-4 lg:px-8 py-8 grid grid-cols-1 gap-5">
 
-                {/* ---------- Add New Design ---------- */}
-                <div className="lg:col-span-2 bg-white rounded-xl shadow-lg p-6">
-                    <h2 className="text-2xl font-bold mb-6">افزودن طرح جدید</h2>
-                    {/* Design Name */}
-                    <div className="form-control mb-6">
-                        <label className="label mb-1.5"><span className="label-text font-medium">نام یا کد طرح</span></label>
-                        <input type="text" className="input input-bordered w-full"
-                               value={designName} onChange={e => setDesignName(e.target.value)} />
-                    </div>
-                    {/* Main Image Upload */}
-                    <div className="form-control mb-6">
-                        <label className="label mb-1.5"><span className="label-text font-medium">تصویر اصلی طرح</span></label>
-                        <label className={`border-2 border-dashed rounded-lg p-6 text-center flex flex-col items-center justify-center cursor-pointer transition 
-      ${mainPreview ? "border-gray-400 bg-gray-100" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}>
-                            {!mainPreview ? (
-                                <>
-                                    <FaImage className="text-5xl text-gray-400 mb-3"/>
-                                    <p className="text-gray-600 mb-2">کلیک کنید یا تصویر را بکشید</p>
-                                    <input type="file" accept="image/*" className="hidden" onChange={handleMainImage}/>
-                                </>
-                            ) : (
-                                <div className="relative w-full h-64">
-                                    <img src={mainPreview} alt="Main" className="w-full h-full object-contain rounded-lg"/>
-                                    <button type="button" className="absolute top-1 right-1 btn btn-circle"
-                                            onClick={(e) => { e.stopPropagation(); setMainImage(null); setMainPreview(null); }}>
-                                        <FaTrash className={"text-error"}/>
-                                    </button>
-                                </div>
+                {/* ---------- Add & Manage Section ---------- */}
+                <div className={"bg-white rounded-xl p-6 shadow-sm"}>
+                    <div className="flex flex-wrap lg:flex-nowrap gap-8">
+
+                        {/* ---------- Add New Design ---------- */}
+                        <div className="w-full lg:w-2/3 flex flex-col">
+                            <h2 className="text-2xl font-bold mb-6">افزودن طرح جدید</h2>
+
+                            {/* Design Name */}
+                            <div className="form-control mb-6">
+                                <label className="label mb-1.5">
+                                    <span className="label-text font-medium">نام یا کد طرح</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    className="input input-bordered w-full"
+                                    value={designName}
+                                    onChange={(e) => setDesignName(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Main Image Upload */}
+                            <div className="form-control mb-6">
+                                <label className="label mb-1.5">
+                                    <span className="label-text font-medium">تصویر اصلی طرح</span>
+                                </label>
+                                <label
+                                    className={`border-2 border-dashed rounded-lg p-6 text-center flex flex-col items-center justify-center cursor-pointer transition 
+          ${mainPreview ? "border-gray-400 bg-gray-100" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
+                                >
+                                    {!mainPreview ? (
+                                        <>
+                                            <FaImage className="text-5xl text-gray-400 mb-3"/>
+                                            <p className="text-gray-600 mb-2">کلیک کنید یا تصویر را بکشید</p>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                className="hidden"
+                                                onChange={handleMainImage}
+                                            />
+                                        </>
+                                    ) : (
+                                        <div className="relative w-full h-64">
+                                            <img
+                                                src={mainPreview}
+                                                alt="Main"
+                                                className="w-full h-full object-contain rounded-lg"
+                                            />
+                                            <button
+                                                type="button"
+                                                className="absolute top-1 right-1 btn btn-circle"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setMainImage(null);
+                                                    setMainPreview(null);
+                                                }}
+                                            >
+                                                <FaTrash className="text-error"/>
+                                            </button>
+                                        </div>
+                                    )}
+                                </label>
+                            </div>
+
+                            {/* Face Images Upload */}
+                            <div className="form-control mb-6">
+                                <label className="label mb-1.5">
+                                    <span className="label-text font-medium">تصاویر فیس‌ها</span>
+                                </label>
+                                <label className="btn btn-primary w-full">
+                                    <FaUpload className="ml-2"/> افزودن فیس
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        multiple
+                                        className="hidden"
+                                        onChange={handleFaceImages}
+                                    />
+                                </label>
+                                {faces.length > 0 && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
+                                        {faces.map((face) => (
+                                            <div key={face.id} className="relative">
+                                                <img
+                                                    src={face.preview}
+                                                    className="w-full h-32 object-cover rounded-lg shadow-sm"
+                                                />
+                                                <button
+                                                    className="absolute top-1 right-1 btn btn-circle !bg-none !border-none"
+                                                    onClick={() => removeFace(face.id)}
+                                                >
+                                                    <FaTrash className="text-error"/>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                        </div>
+
+                        {/* ---------- Divider ---------- */}
+                        <div className="hidden lg:flex justify-center">
+                            <div className="w-px bg-gray-300 h-full mx-auto"></div>
+                        </div>
+
+                        {/* ---------- Labels Management ---------- */}
+                        <div className="flex flex-col w-full lg:w-1/3">
+                            <h1 className="text-xl font-bold mb-6">مدیریت لیبل‌ها</h1>
+
+                            {LabelsIsLoading && (
+                                <p className="text-gray-500">در حال بارگذاری...</p>
                             )}
-                        </label>
-                    </div>
+                            {LabelsIsError && <p className="text-red-500">خطا در دریافت داده‌ها!</p>}
 
-                    {/* Face Images Upload */}
-                    <div className="form-control mb-6">
-                        <label className="label mb-1.5"><span className="label-text font-medium">تصاویر فیس ها</span></label>
-                        <label className="btn btn-primary w-full">
-                            <FaUpload className=" ml-2"/> افزودن فیس
-                            <input type="file" accept="image/*" multiple className="hidden"
-                                   onChange={handleFaceImages}/>
-                        </label>
-                        {faces.length > 0 && (
-                            <div className="grid grid-cols-3 gap-3 mt-3">
-                                {faces.map(face => (
-                                    <div key={face.id} className="relative">
-                                        <img src={face.preview} className="w-full h-32 object-cover rounded-lg shadow-sm"/>
-                                        <button className="absolute top-1 right-1 btn btn-circle !bg-none !border-none"
-                                                onClick={() => removeFace(face.id)}><FaTrash className={"text-error"}/></button>
+                            {/* Label Values Selection */}
+                            <div className="form-control mb-6 overflow-y-auto">
+                                {LabelsData?.map((label: Label) => (
+                                    <div key={label.id} className="mb-4 bg-gray-50 rounded-lg p-4">
+                                        <div className={"flex items-center justify-between mb-3"}>
+                                            <p className="font-semibold text-gray-700 mb-2">{label.name}</p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    className="btn btn-square text-blue-500"
+                                                    onClick={() => setEditingLabel(label)}
+                                                >
+                                                    <CiEdit className="text-2xl"/>
+                                                </button>
+                                                <button
+                                                    className="btn btn-square text-red-500"
+                                                    onClick={() => setDeleteConfirmId(label.id ?? null)}
+                                                >
+                                                    <FaTrash size={16}/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {label.values?.map((value) => (
+                                                <label
+                                                    key={value.id}
+                                                    className="flex items-center gap-2 cursor-pointer"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        className="checkbox checkbox-primary checkbox-sm"
+                                                        checked={selectedLabelValueIds.includes(value.id!)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedLabelValueIds([
+                                                                    ...selectedLabelValueIds,
+                                                                    value.id!,
+                                                                ]);
+                                                            } else {
+                                                                setSelectedLabelValueIds(
+                                                                    selectedLabelValueIds.filter(
+                                                                        (id) => id !== value.id
+                                                                    )
+                                                                );
+                                                            }
+                                                        }}
+                                                    />
+                                                    <span className="text-sm">
+                      {value.faName} ({value.enName})
+                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
-                        )}
-                    </div>
-
-                    {/* Label Values Selection */}
-                    <div className="form-control mb-6">
-                        <label className="label mb-1.5"><span className="label-text font-medium">انتخاب مقادیر لیبل</span></label>
-                        <div className="bg-gray-50 rounded-lg p-4 max-h-64 overflow-y-auto">
-                            {data?.map((label: Label) => (
-                                <div key={label.id} className="mb-4">
-                                    <p className="font-semibold text-gray-700 mb-2">{label.name}</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {label.values?.map((value) => (
-                                            <label key={value.id} className="flex items-center gap-2 cursor-pointer">
-                                                <input
-                                                    type="checkbox"
-                                                    className="checkbox checkbox-primary checkbox-sm"
-                                                    checked={selectedLabelValueIds.includes(value.id!)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) {
-                                                            setSelectedLabelValueIds([...selectedLabelValueIds, value.id!]);
-                                                        } else {
-                                                            setSelectedLabelValueIds(selectedLabelValueIds.filter(id => id !== value.id));
-                                                        }
-                                                    }}
-                                                />
-                                                <span className="text-sm">{value.faName} ({value.enName})</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
                         </div>
                     </div>
-
                     {/* Save Button */}
                     <div className="flex justify-end mt-6">
                         <button onClick={handleSaveDesign} className="btn btn-primary px-6">
-                            افزودن به دیتاست
+                          ایجاد طرح جدید
                         </button>
                     </div>
                 </div>
 
-                {/* ---------- Labels Management ---------- */}
-                <div className="lg:col-span-1 bg-white rounded-xl shadow-md p-5">
-                    <h1 className="text-xl font-bold mb-6">مدیریت لیبل‌ها</h1>
-
-                    {isLoading && <p className="text-gray-500">در حال بارگذاری...</p>}
-                    {isError && <p className="text-red-500">خطا در دریافت داده‌ها!</p>}
-
-                    <div className="flex flex-col gap-4">
-                        {data?.map((label: any) => (
-                            <div key={label.id}
-                                 className="bg-gray-50 rounded-xl p-4 shadow-sm flex flex-col gap-2 hover:shadow transition">
-                                <div className="flex justify-between items-center">
-                                    <div className="font-semibold text-gray-700">{label.name}</div>
-                                    <div className="flex gap-2">
-                                        <button className="btn btn-square text-blue-500"
-                                                onClick={() => setEditingLabel(label)}>
-                                            <CiEdit className="text-2xl"/>
-                                        </button>
-                                        <button className="btn btn-square text-red-500"
-                                                onClick={() => setDeleteConfirmId(label.id)}>
-                                            <FaTrash size={16}/>
-                                        </button>
-                                    </div>
-                                </div>
-                                {label.values?.length > 0 && (
-                                    <select defaultValue="انتخاب مقدار"
-                                            className="select w-full mt-2 border border-gray-300 rounded-lg p-2">
-                                        <option disabled>انتخاب مقدار</option>
-                                        {label.values.map((value: any) => (
-                                            <option key={value.id}
-                                                    value={value.enName}>{`${value.enName} (${value.faName})`}</option>
+                {/* ---------- All Designs ---------- */}
+                <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100 shadow-sm">
+                    <table className="table">
+                        <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>نام طرح</th>
+                            <th>تصویر اصلی</th>
+                            <th>تعداد فیس‌ها</th>
+                            <th>لیبل‌ها</th>
+                            <th>تاریخ ایجاد</th>
+                            <th>آخرین ویرایش</th>
+                            <th>عملیات</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {DesignData && DesignData?.length > 0 &&
+                            DesignData.map((design: any, index: number) => (
+                                <tr key={index}>
+                                    <th>{index + 1}</th>
+                                    <td>{design.name}</td>
+                                    <td>
+                                        <div className="avatar">
+                                            <div className="mask mask-squircle h-12 w-12">
+                                                <img src={design.mainImage} alt="design"/>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{design.faceCount}</td>
+                                    <td className="flex flex-wrap gap-1">
+                                        {design.labels.map((label: any, i: number) => (
+                                            <div
+                                                key={i}
+                                                className="badge badge-soft badge-info text-xs"
+                                            >
+                                                {`${label.labelValue.enName} (${label.labelValue.faName})`}
+                                            </div>
                                         ))}
-                                    </select>
-                                )}
-                            </div>
-                        ))}
-                    </div>
+                                    </td>
+                                    <td>{toJalali(design.createdAt)}</td>
+                                    <td>{toJalali(design.updatedAt)}</td>
+                                    <td className="flex gap-2">
+                                        <button className="btn btn-square btn-ghost text-blue-500">
+                                            <CiEdit className="text-lg"/>
+                                        </button>
+                                        <button className="btn btn-square btn-ghost text-red-500">
+                                            <FaTrash size={13}/>
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
+
 
             {/* ---------- Delete Modal ---------- */}
             <input type="checkbox" id="delete-modal" className="modal-toggle" checked={deleteConfirmId !== null}
