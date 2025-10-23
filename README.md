@@ -1,36 +1,138 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎨 Tile Labeler
 
-## Getting Started
+سیستم مدیریت و برچسب‌گذاری طرح‌های کاشی با Next.js و Prisma
 
-First, run the development server:
+## 🚀 نصب و راه‌اندازی
+
+### 1. نصب وابستگی‌ها
+
+```bash
+npm install
+```
+
+### 2. تنظیم دیتابیس
+
+پروژه از SQLite استفاده می‌کند و فایل `.env` قبلا تنظیم شده است.
+
+```bash
+# اجرای migrations
+npx prisma migrate deploy
+
+# یا push کردن schema
+npx prisma db push
+
+# ایجاد داده‌های اولیه
+npm run db:seed
+```
+
+### 3. اجرای پروژه
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+پروژه در آدرس `http://localhost:3000` در دسترس خواهد بود.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📦 دستورات مفید
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - اجرای سرور development
+- `npm run build` - ساخت نسخه production
+- `npm run start` - اجرای نسخه production
+- `npm run db:seed` - ایجاد داده‌های اولیه
+- `npm run db:studio` - باز کردن Prisma Studio برای مشاهده دیتابیس
+- `npx prisma migrate dev` - ایجاد migration جدید
+- `npx prisma generate` - generate کردن Prisma Client
 
-## Learn More
+## 🎯 ویژگی‌ها
 
-To learn more about Next.js, take a look at the following resources:
+### ✅ مدیریت لیبل‌ها
+- ایجاد، ویرایش و حذف لیبل‌ها
+- مدیریت مقادیر لیبل (فارسی و لاتین)
+- دسته‌بندی طرح‌ها با لیبل‌های مختلف
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### ✅ مدیریت طرح‌ها
+- آپلود تصویر اصلی طرح
+- آپلود چندین تصویر فیس
+- انتخاب مقادیر لیبل برای هر طرح
+- ذخیره‌سازی خودکار تصاویر در `public/images/designs`
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### ✅ ساختار دیتابیس
+- **Label**: لیبل‌های اصلی (رنگ، سایز، طرح و...)
+- **LabelValue**: مقادیر هر لیبل
+- **Design**: طرح‌های کاشی
+- **DesignImage**: تصاویر فیس‌های هر طرح
+- **DesignLabelValue**: رابطه بین طرح‌ها و مقادیر لیبل
 
-## Deploy on Vercel
+## 🛠️ تکنولوژی‌ها
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Framework**: Next.js 16
+- **Database**: SQLite + Prisma ORM
+- **UI**: TailwindCSS + DaisyUI
+- **State Management**: TanStack Query (React Query)
+- **HTTP Client**: Axios
+- **Icons**: React Icons
+- **Notifications**: React Hot Toast
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📁 ساختار پروژه
+
+```
+├── app/
+│   ├── api/          # API Routes
+│   │   ├── designs/  # API طرح‌ها
+│   │   └── labels/   # API لیبل‌ها
+│   ├── lib/          # کتابخانه‌ها و utilities
+│   ├── generated/    # Prisma Client (auto-generated)
+│   ├── page.tsx      # صفحه اصلی
+│   └── layout.tsx    # Layout کلی
+├── components/       # کامپوننت‌های React
+├── prisma/
+│   ├── schema.prisma # Schema دیتابیس
+│   ├── migrations/   # Migration files
+│   ├── seed.js       # Seed script
+│   └── dev.db        # فایل دیتابیس SQLite
+└── public/
+    ├── fonts/        # فونت‌های فارسی
+    └── images/
+        └── designs/  # تصاویر طرح‌ها (auto-generated)
+```
+
+## 🔧 عیب‌یابی
+
+### خطای "Unable to open the database file"
+
+اگر این خطا را دریافت کردید:
+
+1. مطمئن شوید که فایل `.env` وجود دارد و محتوای آن:
+   ```
+   DATABASE_URL="file:./prisma/dev.db"
+   ```
+
+2. Prisma Client را دوباره generate کنید:
+   ```bash
+   npx prisma generate
+   ```
+
+3. سرور را Restart کنید
+
+### خطای EPERM در Windows
+
+اگر در هنگام `prisma generate` خطای EPERM دریافت کردید، سرور Next.js را متوقف کنید و دوباره تلاش کنید.
+
+## 📝 نکات
+
+- تصاویر طرح‌ها در `public/images/designs/{نام_طرح}/` ذخیره می‌شوند
+- نام طرح‌ها باید یکتا باشند
+- برای مشاهده و ویرایش دیتابیس از Prisma Studio استفاده کنید: `npm run db:studio`
+
+## 👨‍💻 توسعه
+
+برای ایجاد migration جدید پس از تغییر schema:
+
+```bash
+npx prisma migrate dev --name your_migration_name
+```
+
+## 📄 لایسنس
+
+Private Project
+

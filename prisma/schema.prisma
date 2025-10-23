@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Label {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique
+  values    LabelValue[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model LabelValue {
+  id        Int      @id @default(autoincrement())
+  faName    String
+  enName    String
+  labelId   Int
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  designs   DesignLabelValue[] // ← این خط اضافه شد
+
+  @@index([labelId])
+}
+
+model Design {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique  // نام یکتا
+  faceCount Int
+  mainImage String        // مسیر تصویر اصلی: folder/name.png
+  images    DesignImage[] // تصاویر فیس
+  labels    DesignLabelValue[] // لیبل‌ها و مقدارها
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model DesignImage {
+  id       Int     @id @default(autoincrement())
+  designId Int
+  index    Int     // شماره فیس برای نامگذاری: face_{index}
+  url      String  // مسیر ذخیره تصویر: folder/name_face_{index}.png
+  design   Design  @relation(fields: [designId], references: [id], onDelete: Cascade)
+
+  @@index([designId])
+  @@unique([designId, index]) // هر فیس یک index یکتا برای هر طرح
+}
+
+// جدول واسط برای رابطه چند-به-چند بین Design و LabelValue
+model DesignLabelValue {
+  id           Int        @id @default(autoincrement())
+  designId     Int
+  labelValueId Int
+  design       Design     @relation(fields: [designId], references: [id], onDelete: Cascade)
+  labelValue   LabelValue @relation(fields: [labelValueId], references: [id], onDelete: Cascade)
+
+  @@unique([designId, labelValueId])
+  @@index([designId])
+  @@index([labelValueId])
+}
+
