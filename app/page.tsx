@@ -206,14 +206,14 @@ export default function Home() {
         <div className="bg-gray-100 min-h-screen w-full">
             <Header />
 
-            <div className="container max-w-[65%] mx-auto px-4 lg:px-8 py-8 grid grid-cols-1 gap-5">
+            <div className="container max-w-[70%] mx-auto px-4 lg:px-8 py-8 grid grid-cols-1 gap-5">
 
                 {/* ---------- Add & Manage Section ---------- */}
                 <div className={"bg-white rounded-xl p-6 shadow-sm"}>
                     <div className="flex flex-wrap lg:flex-nowrap gap-8">
 
                         {/* ---------- Add New Design ---------- */}
-                        <div className="w-full lg:w-2/3 flex flex-col">
+                        <div className="w-full lg:w-1/2 flex flex-col">
                             <h2 className="text-2xl font-bold mb-6">{editMode ? "ویرایش طرح" : "ایجاد طرح جدید"}</h2>
 
                             {/* Design Name */}
@@ -314,11 +314,12 @@ export default function Home() {
                         </div>
 
                         {/* ---------- Labels Management ---------- */}
-                        <div className="flex flex-col w-full lg:w-1/3">
+                        <div className="flex flex-col w-full lg:w-1/2">
                             <h1 className="text-xl font-bold mb-6">مدیریت لیبل ها</h1>
 
                             {LabelsIsLoading && <p className="text-gray-500">Loading...</p>}
-                            {LabelsIsError && <p className="text-red-500">Error fetching data!</p>}
+                            {LabelsIsError && <p className="text-red-500">خطا در دریافت دیتا.</p>}
+                            {LabelsData?.length <= 0 && <p className="text-gray-500">لیبلی یافت نشد.</p>}
 
                             {/* Label Values Selection */}
                             <div className="form-control mb-6 overflow-y-auto">
@@ -365,8 +366,8 @@ export default function Home() {
 
                     {/* Save Buttons */}
                     <div className="flex justify-end mt-6 gap-2">
-                        <button onClick={handleSaveDesign} className="btn btn-primary px-6">
-                            {editMode ? "ویرایش طرح" : "ایجاد طرح جدید"}
+                        <button onClick={handleSaveDesign} className={`btn btn-primary px-6`}>
+                            {upsertDesign.isPending ? <span className="loading loading-spinner"></span> : <span>{editMode ? "ویرایش طرح" : "ایجاد طرح جدید"}</span>}
                         </button>
                         <button
                             onClick={handleCancelEdit}
@@ -451,10 +452,10 @@ export default function Home() {
             <div className="modal">
                 <div className="modal-box">
                     <h3 className="font-bold text-lg">
-                        Delete {deleteDesignId ? "Design" : "Label"}
+                        حذف {deleteDesignId ? "طرح" : "لیبل"}
                     </h3>
                     <p className="py-4 text-gray-600">
-                        Are you sure you want to delete this item? This action cannot be undone.
+                        آیا مطمئن هستید که می‌خواهید این مورد را حذف کنید؟ این اقدام قابل بازگشت نیست.
                     </p>
                     <div className="modal-action">
                         <button
@@ -464,7 +465,7 @@ export default function Home() {
                                 setDeleteDesignId(null);
                             }}
                         >
-                            Cancel
+                            انصراف
                         </button>
                         <button
                             className="btn btn-error"
@@ -481,7 +482,7 @@ export default function Home() {
                                 }
                             }}
                         >
-                            Delete
+                            حذف
                         </button>
                     </div>
                 </div>
@@ -491,7 +492,7 @@ export default function Home() {
             <input type="checkbox" id="update-modal" className="modal-toggle" checked={editingLabel !== null} readOnly />
             <div className="modal">
                 <div className="modal-box max-w-3xl">
-                    <h3 className="font-bold text-xl mb-4">Edit Label</h3>
+                    <h3 className="font-bold text-xl mb-4">ویرایش لیبل</h3>
                     {editingLabel && (
                         <div className="space-y-4">
                             <input
@@ -534,13 +535,13 @@ export default function Home() {
                             <button className="btn btn-outline btn-primary mt-2" onClick={() => setEditingLabel({
                                 ...editingLabel,
                                 values: [...editingLabel.values, { faName: "", enName: "" }]
-                            })}>Add New Value
+                            })}>مقدار جدید
                             </button>
                         </div>
                     )}
                     <div className="modal-action mt-4">
-                        <button className="btn btn-ghost" onClick={() => setEditingLabel(null)}>Cancel</button>
-                        <button className="btn btn-primary" onClick={() => editingLabel && handleSaveLabel(editingLabel)}>Save Changes</button>
+                        <button className="btn btn-ghost" onClick={() => setEditingLabel(null)}>انصراف</button>
+                        <button className="btn btn-primary" onClick={() => editingLabel && handleSaveLabel(editingLabel)}>ذخیره تغییرات</button>
                     </div>
                 </div>
             </div>

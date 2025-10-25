@@ -6,49 +6,45 @@ export async function POST(request: Request) {
     try {
         const body = await request.json();
 
-        // Array of labels
-        if (Array.isArray(body)) {
-            const createdLabels = await Promise.all(
-                body.map(async (label: { name: string; values: { faName: string; enName: string }[] }) =>
-                    prisma.label.create({
-                        data: {
-                            name: label.name,
-                            values: {
-                                create: label.values.map((v) => ({
-                                    faName: v.faName,
-                                    enName: v.enName,
-                                })),
-                            },
-                        },
-                        include: { values: true },
-                    })
-                )
-            );
+        // Ensure body is always an array
+        const labels = Array.isArray(body) ? body : [body];
 
-            return NextResponse.json(createdLabels);
+        // Optional: filter out invalid labels
+        const validLabels = labels.filter(
+            (label) =>
+                label.name && label.name.trim() &&
+                Array.isArray(label.values) &&
+                label.values.every((v : any) => v.faName && v.enName)
+        );
+
+        if (validLabels.length === 0) {
+            return NextResponse.json({ error: "No valid labels provided" }, { status: 400 });
         }
 
-        // Single label
-        const { name, values } = body;
-        const label = await prisma.label.create({
-            data: {
-                name,
-                values: {
-                    create: values.map((v: { faName: string; enName: string }) => ({
-                        faName: v.faName,
-                        enName: v.enName,
-                    })),
-                },
-            },
-            include: { values: true },
-        });
+        const createdLabels = await Promise.all(
+            validLabels.map(async (label: { name: string; values: { faName: string; enName: string }[] }) =>
+                prisma.label.create({
+                    data: {
+                        name: label.name,
+                        values: {
+                            create: label.values.map((v) => ({
+                                faName: v.faName,
+                                enName: v.enName,
+                            })),
+                        },
+                    },
+                    include: { values: true },
+                })
+            )
+        );
 
-        return NextResponse.json(label);
+        return NextResponse.json(createdLabels);
     } catch (error) {
         console.error(error);
-        return NextResponse.json({ error: "خطا در ذخیره داده‌ها" }, { status: 500 });
+        return NextResponse.json({ error: "Error saving data" }, { status: 500 });
     }
 }
+
 
 // READ
 export async function GET() {

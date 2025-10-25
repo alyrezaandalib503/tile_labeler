@@ -1,20 +1,20 @@
 "use client";
-import React, { useState } from "react";
-import { toast } from "react-hot-toast";
+import React, {ChangeEvent, useState} from "react";
+import {toast} from "react-hot-toast";
 
 // services
-import { useService } from "./service";
+import {useService} from "./service";
 
 // types
-import type { Label } from "./type";
+import type {Label} from "./type";
 
 // icons
-import { FaPlus, FaTrash } from "react-icons/fa";
-import { BsDatabase } from "react-icons/bs";
-import { IoMdClose } from "react-icons/io";
+import {FaPlus, FaTrash} from "react-icons/fa";
+import {BsDatabase} from "react-icons/bs";
+import {IoMdClose} from "react-icons/io";
 
 export default function Header() {
-    const { addLabel } = useService();
+    const {addLabel} = useService();
 
     const [newLabelName, setNewLabelName] = useState("");
     const [labels, setLabels] = useState<Label[]>([]);
@@ -42,7 +42,7 @@ export default function Header() {
                 index === labelIndex
                     ? {
                         ...label,
-                        values: [...label.values, { faName: "", enName: "" }],
+                        values: [...label.values, {faName: "", enName: ""}],
                     }
                     : label
             )
@@ -62,7 +62,7 @@ export default function Header() {
                     ? {
                         ...label,
                         values: label.values.map((val, valIndex) =>
-                            valIndex === valueIndex ? { ...val, [field]: value } : val
+                            valIndex === valueIndex ? {...val, [field]: value} : val
                         ),
                     }
                     : label
@@ -95,11 +95,6 @@ export default function Header() {
             }))
             .filter((label) => label.name.trim() !== "");
 
-        if (cleanedLabels.length === 0) {
-            toast.error("هیچ داده معتبری برای ذخیره وجود ندارد ❌");
-            return;
-        }
-
         addLabel.mutate(cleanedLabels, {
             onSuccess: () => {
                 toast.success("ذخیره با موفقیت انجام شد 🎉");
@@ -114,11 +109,36 @@ export default function Header() {
         });
     };
 
+    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.type !== "application/json") {
+            toast.error("Only JSON files are allowed!");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const json = JSON.parse(event.target?.result as string);
+                const newLabels = Array.isArray(json) ? json : [json];
+
+                setLabels((prevLabels) => [...prevLabels, ...newLabels])
+            } catch (error) {
+                console.error(error);
+                toast.error("Invalid JSON file!");
+            }
+        };
+
+        reader.readAsText(file);
+    };
+
     return (
         <div className="flex items-center justify-between navbar bg-white text-black shadow-sm px-20 py-5">
             <div className="flex items-center justify-between gap-2">
                 <div className="bg-info/10 text-info/80 p-1.5 rounded-xl">
-                    <BsDatabase className="text-3xl" />
+                    <BsDatabase className="text-3xl"/>
                 </div>
                 <div className="flex flex-col gap-1">
                     <div className="text-xl font-black">سیستم مدیریت طرح‌های کاشی و سرامیک</div>
@@ -152,11 +172,20 @@ export default function Header() {
                             }}
                             className="btn btn-sm btn-circle btn-ghost hover:bg-gray-100"
                         >
-                            <IoMdClose className="text-xl" />
+                            <IoMdClose className="text-xl"/>
                         </button>
                     </div>
 
                     {/* Add new label */}
+                    <label className="btn btn-primary mb-4 cursor-pointer">
+                        Import JSON
+                        <input
+                            type="file"
+                            accept=".json,application/json"
+                            className="hidden"
+                            onChange={handleFileChange}
+                        />
+                    </label>
                     <div className="flex items-center gap-3 mb-8">
                         <input
                             type="text"
@@ -170,7 +199,7 @@ export default function Header() {
                             className="btn btn-primary btn-square text-lg shadow-md hover:scale-105 transition"
                             onClick={addNewLabel}
                         >
-                            <FaPlus />
+                            <FaPlus/>
                         </button>
                     </div>
 
@@ -197,7 +226,7 @@ export default function Header() {
                                         className="btn btn-ghost btn-sm text-red-500 hover:bg-red-100"
                                         onClick={() => deleteLabel(labelIndex)}
                                     >
-                                        <FaTrash />
+                                        <FaTrash/>
                                     </button>
                                 </div>
 
@@ -229,7 +258,7 @@ export default function Header() {
                                                 className="btn btn-error btn-sm btn-square hover:scale-105 transition"
                                                 onClick={() => deleteValue(labelIndex, valueIndex)}
                                             >
-                                                <FaTrash className="text-sm" />
+                                                <FaTrash className="text-sm"/>
                                             </button>
                                         </div>
                                     ))}
@@ -242,7 +271,7 @@ export default function Header() {
                                         className="btn btn-outline btn-primary btn-sm rounded-lg hover:scale-105 transition"
                                         onClick={() => addValueToLabel(labelIndex)}
                                     >
-                                        <FaPlus className="ml-2" /> افزودن مقدار
+                                        <FaPlus className="ml-2"/> افزودن مقدار
                                     </button>
                                 </div>
                             </div>
