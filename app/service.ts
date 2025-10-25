@@ -44,9 +44,15 @@ export function useService() {
     });
 
     // CREATE or UPDATE a design
-     const upsertDesign = useMutation({
+    const upsertDesign = useMutation({
         mutationFn: async (formData: FormData) => {
-            const res = await axios.post("/api/designs", formData);
+            const hasId = formData.has("id");
+            const res = await axios.request({
+                url: "/api/designs",
+                method: hasId ? "PUT" : "POST",
+                data: formData,
+                headers: { "Content-Type": "multipart/form-data" },
+            });
             return res.data;
         },
     });

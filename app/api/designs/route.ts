@@ -19,6 +19,7 @@ export async function GET() {
                     select: {
                         labelValue: {
                             select: {
+                                id : true ,
                                 faName: true,
                                 enName: true,
                             },
@@ -126,32 +127,104 @@ export async function POST(req: Request) {
 // PUT update a design
 export async function PUT(req: Request) {
     try {
-        const data = await req.json();
-        const {id, name, faceCount, mainImage, imageUrls, labelValueIds} = data;
+        console.log("=== PUT /api/designs START ===");
 
-        // Update design
-        const design = await prisma.design.update({
-            where: {id},
-            data: {
-                name,
-                faceCount,
-                mainImage,
-                images: {
-                    deleteMany: {}, // حذف تصاویر قبلی
-                    create: imageUrls.map((url: string, index: number) => ({url, index: index + 1})),
-                },
-                labels: {
-                    deleteMany: {}, // حذف مقادیر قبلی
-                    create: labelValueIds.map((labelValueId: number) => ({labelValueId})),
-                },
-            },
-            include: {images: true, labels: true},
+        const formData = await req.formData();
+        console.log("FormData received");
+
+        const id = Number(formData.get("id"));
+        const name = formData.get("name")?.toString();
+        if (!id || !name) {
+            return NextResponse.json({ error: "Invalid request data" }, { status: 400 });
+        }
+
+        console.log("Updating design:", { id, name });
+
+        const mainImageFile = formData.get("mainImage");
+        const faceFiles = formData.getAll("faces").filter(f => f instanceof File) as File[];
+        const labelValueIds = formData.getAll("labelValueIds").map(id => Number(id));
+
+        const existingDesign = await prisma.design.findUnique({
+            where: { id },
+            include: { images: true, labels: true },
         });
 
+        if (!existingDesign) {
+            return NextResponse.json({ error: "Design not found" }, { status: 404 });
+        }
+
+        const oldFolderPath = path.join(process.cwd(), "public/images/designs", existingDesign.name);
+        const newFolderPath = path.join(process.cwd(), "public/images/designs", name);
+
+        if (existingDesign.name !== name) {
+            if (fs.existsSync(oldFolderPath)) {
+                fs.renameSync(oldFolderPath, newFolderPath);
+            } else {
+                fs.mkdirSync(newFolderPath, { recursive: true });
+            }
+        } else if (!fs.existsSync(newFolderPath)) {
+            fs.mkdirSync(newFolderPath, { recursive: true });
+        }
+
+        let mainImagePath = existingDesign.mainImage;
+        if (mainImageFile instanceof File) {
+            const newMainPath = path.join(newFolderPath, "main.png");
+            const buffer = Buffer.from(await mainImageFile.arrayBuffer());
+            fs.writeFileSync(newMainPath, buffer);
+            mainImagePath = `/images/designs/${name}/main.png`;
+        }
+
+        let imageUrls: { index: number; url: string }[] = [];
+        if (faceFiles.length > 0) {
+            existingDesign.images.forEach(img => {
+                const imgPath = path.join(process.cwd(), "public", img.url);
+                if (fs.existsSync(imgPath)) fs.unlinkSync(imgPath);
+            });
+
+            for (let i = 0; i < faceFiles.length; i++) {
+                const faceFile = faceFiles[i];
+                const facePath = path.join(newFolderPath, `face_${i + 1}.png`);
+                const buffer = Buffer.from(await faceFile.arrayBuffer());
+                fs.writeFileSync(facePath, buffer);
+                imageUrls.push({ index: i + 1, url: `/images/designs/${name}/face_${i + 1}.png` });
+            }
+        } else {
+            imageUrls = existingDesign.images.map((img, i) => ({
+                index: i + 1,
+                url: img.url,
+            }));
+        }
+
+        const design = await prisma.design.update({
+            where: { id },
+            data: {
+                name,
+                mainImage: mainImagePath,
+                faceCount: imageUrls.length,
+                images: {
+                    deleteMany: {},
+                    create: imageUrls.map(img => ({
+                        index: img.index,
+                        url: img.url,
+                    })),
+                },
+                labels: {
+                    deleteMany: {},
+                    create: labelValueIds.map(labelValueId => ({ labelValueId })),
+                },
+            },
+            include: { images: true, labels: true },
+        });
+
+        console.log("Design updated successfully:", design.id);
         return NextResponse.json(design);
-    } catch (error) {
-        console.error(error);
-        return NextResponse.json({error: "Failed to update design"}, {status: 500});
+
+    } catch (error: any) {
+        console.error("PUT /api/designs error:", error);
+        return NextResponse.json({
+            error: "Failed to update design",
+            details: error?.message || String(error),
+        }, { status: 500 });
     }
 }
 

@@ -1,53 +1,67 @@
 "use client";
 
-import {ChangeEvent, useState} from "react";
+import { ChangeEvent, useState } from "react";
 import Header from "@/components/layout/header/header";
-import {toast} from "react-hot-toast";
-// icons
-import {FaTrash, FaUpload, FaImage} from "react-icons/fa";
-import {CiEdit} from "react-icons/ci";
-import {IoCloseOutline} from "react-icons/io5";
+import { toast } from "react-hot-toast";
 
-// types
-import type {Label, DesignFace} from "@/app/type";
+// Icons
+import { FaTrash, FaUpload, FaImage } from "react-icons/fa";
+import { CiEdit } from "react-icons/ci";
 
-// services
-import {useService} from "@/app/service";
-import {toJalali} from "@/utils/toJalali";
+// Types
+import type { Label, DesignFace } from "@/app/type";
+
+// Services
+import { useService } from "@/app/service";
+import { toJalali } from "@/utils/toJalali";
 
 export default function Home() {
-    const {getLabels, deleteLabel, updateLabel, deleteDesign, getDesigns, upsertDesign} = useService();
-    const {data: LabelsData, isLoading: LabelsIsLoading, isError: LabelsIsError, refetch: LabelsRefetch} = getLabels;
-    const {data: DesignData, isLoading: DesignIsLoading, isError: DesignIsError, refetch: DesignRefetch} = getDesigns;
+    const {
+        getLabels,
+        deleteLabel,
+        updateLabel,
+        deleteDesign,
+        getDesigns,
+        upsertDesign,
+    } = useService();
 
-    // Label editing & deletion
+    const { data: LabelsData, isLoading: LabelsIsLoading, isError: LabelsIsError, refetch: LabelsRefetch } = getLabels;
+    const { data: DesignData, refetch: DesignRefetch } = getDesigns;
+
+    // ---------- Label editing & deletion ----------
     const [editingLabel, setEditingLabel] = useState<Label | null>(null);
     const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
 
-    // New Design state
-    const [designName, setDesignName] = useState("");
-    const [mainImage, setMainImage] = useState<File | null>(null);
-    const [mainPreview, setMainPreview] = useState<string | null>(null);
-    const [faces, setFaces] = useState<DesignFace[]>([]);
-    const [selectedLabelValueIds, setSelectedLabelValueIds] = useState<number[]>([]);
-    // --- برای حذف و ویرایش طرح ---
-    const [editingDesign, setEditingDesign] = useState<any | null>(null);
+    // ---------- Design editing & creation ----------
+    const [designId, setDesignId] = useState<number | null>(null);
+    const [editMode, setEditMode] = useState<boolean | null>(null);
     const [deleteDesignId, setDeleteDesignId] = useState<number | null>(null);
+
+    // ---------- Unified Design Form State ----------
+    const [designForm, setDesignForm] = useState({
+        name: "",
+        mainImage: null as File | null,
+        mainPreview: null as string | null,
+        faces: [] as DesignFace[],
+        selectedLabelValueIds: [] as number[],
+    });
+
+    const { name, mainImage, mainPreview, faces, selectedLabelValueIds } = designForm;
 
     // ---------- Handlers ----------
 
-    // Label edit
+    // Label save
     const handleSaveLabel = (label: Label) => {
         const cleanedValues = label.values.filter(
             (v) => v.faName.trim() || v.enName.trim()
         );
         updateLabel.mutate(
-            {...label, values: cleanedValues},
+            { ...label, values: cleanedValues },
             {
                 onSuccess: () => {
                     LabelsRefetch();
                     setEditingLabel(null);
-                }
+                },
             }
         );
     };
@@ -62,13 +76,23 @@ export default function Home() {
         });
     };
 
+    // Handle design name change
+    const handleDesignNameChange = (value: string) => {
+        setDesignForm((prev) => ({ ...prev, name: value }));
+    };
+
+    // Handle main image upload
     const handleMainImage = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files?.[0]) return;
         const file = e.target.files[0];
-        setMainImage(file);
-        setMainPreview(URL.createObjectURL(file));
+        setDesignForm((prev) => ({
+            ...prev,
+            mainImage: file,
+            mainPreview: URL.createObjectURL(file),
+        }));
     };
 
+    // Handle face images upload
     const handleFaceImages = (e: ChangeEvent<HTMLInputElement>) => {
         if (!e.target.files) return;
         const newFaces: DesignFace[] = Array.from(e.target.files).map((file, idx) => ({
@@ -76,72 +100,113 @@ export default function Home() {
             file,
             preview: URL.createObjectURL(file),
         }));
-        setFaces([...faces, ...newFaces]);
+        setDesignForm((prev) => ({
+            ...prev,
+            faces: [...prev.faces, ...newFaces],
+        }));
     };
 
-    const removeFace = (id: number) => setFaces(faces.filter(f => f.id !== id));
+    // Remove a face image
+    const removeFace = (id: number) => {
+        setDesignForm((prev) => ({
+            ...prev,
+            faces: prev.faces.filter((f) => f.id !== id),
+        }));
+    };
 
-    // Save new design
+    // Toggle label selection
+    const toggleLabelValue = (id: number, checked: boolean) => {
+        setDesignForm((prev) => ({
+            ...prev,
+            selectedLabelValueIds: checked
+                ? [...prev.selectedLabelValueIds, id]
+                : prev.selectedLabelValueIds.filter((x) => x !== id),
+        }));
+    };
+
+    // Save or update a design
     const handleSaveDesign = async () => {
-        if (!designName.trim()) return toast.error("نام طرح نمی‌تواند خالی باشد");
-        if (!mainImage) return toast.error("تصویر اصلی طرح انتخاب نشده است");
+        if (!designForm.name.trim()) return toast.error("Design name cannot be empty");
+        if (!designForm.mainPreview) return toast.error("Main design image not selected");
 
         try {
             const formData = new FormData();
-            formData.append("name", designName);
-            formData.append("mainImage", mainImage);
 
-            faces.forEach((face) => formData.append("faces", face.file));
+            if (editMode && designId) formData.append("id", designId.toString());
+            formData.append("name", designForm.name);
 
-            selectedLabelValueIds.forEach(id => formData.append("labelValueIds", id.toString()));
+            if (designForm.mainImage instanceof File) formData.append("mainImage", designForm.mainImage);
+
+            designForm.faces.forEach((face) => {
+                if (face.file) formData.append("faces", face.file);
+            });
+
+            designForm.selectedLabelValueIds.forEach((id) =>
+                formData.append("labelValueIds", id.toString())
+            );
 
             await upsertDesign.mutateAsync(formData);
 
-            toast.success("طرح با موفقیت ثبت شد 🎉");
-            DesignRefetch()
+            toast.success(editMode ? "Design updated successfully ✏️" : "New design created 🎉");
+            DesignRefetch();
 
-            setDesignName("");
-            setMainImage(null);
-            setMainPreview(null);
-            setFaces([]);
-            setSelectedLabelValueIds([]);
+            // Reset form state
+            setEditMode(false);
+            setDesignId(null);
+            setDesignForm({
+                name: "",
+                mainImage: null,
+                mainPreview: null,
+                faces: [],
+                selectedLabelValueIds: [],
+            });
         } catch (error: any) {
             console.error(error);
-            // نمایش خطای دقیق‌تر از سرور
-            const errorMessage = error?.response?.data?.error || error?.response?.data?.details || "ثبت طرح با خطا مواجه شد";
+            const errorMessage =
+                error?.response?.data?.error ||
+                error?.response?.data?.details ||
+                "Failed to save design";
             toast.error(errorMessage);
         }
     };
 
-    // Design delete
-    const handleDeleteDesign = async (id: number) => {
-        try {
-            await deleteDesign.mutateAsync(id);
-            toast.success("طرح با موفقیت حذف شد 🗑️");
-            DesignRefetch();
-            setDeleteDesignId(null);
-        } catch (error: any) {
-            console.error(error);
-            const message = error?.response?.data?.error || "خطا در حذف طرح";
-            toast.error(message);
-        }
+    // Enter edit mode for a design
+    const handleEditDesign = (design: any) => {
+        setDesignId(design.id);
+        setEditMode(true);
+        setDesignForm({
+            name: design.name,
+            mainImage: null,
+            mainPreview: design.mainImage,
+            faces: design.images.map((img: any) => ({
+                id: img.id || Date.now(),
+                preview: img.url,
+            })),
+            selectedLabelValueIds: design.labels.map((l: any) => l.labelValue.id),
+        });
+        toast("Edit mode activated 📝", { icon: "✏️" });
     };
 
-    // Design Edit
-    const handleEditDesign = (design: any) => {
-        // setEditingDesignId(design.id);
-        setDesignName(design.name);
-        setMainPreview(design.mainImage);
-        setSelectedLabelValueIds(design.labels.map((l: any) => l.labelValueId));
-        toast("حالت ویرایش فعال شد 📝", {icon: "✏️"});
+    // Cancel edit mode
+    const handleCancelEdit = () => {
+        setEditMode(false);
+        setDesignId(null);
+        setDesignForm({
+            name: "",
+            mainImage: null,
+            mainPreview: null,
+            faces: [],
+            selectedLabelValueIds: [],
+        });
+        toast("Edit mode deactivated 📝", { icon: "✏️" });
     };
 
     // ---------- Render ----------
     return (
         <div className="bg-gray-100 min-h-screen w-full">
-            <Header/>
+            <Header />
 
-            <div className="container mx-auto px-4 lg:px-8 py-8 grid grid-cols-1 gap-5">
+            <div className="container max-w-[65%] mx-auto px-4 lg:px-8 py-8 grid grid-cols-1 gap-5">
 
                 {/* ---------- Add & Manage Section ---------- */}
                 <div className={"bg-white rounded-xl p-6 shadow-sm"}>
@@ -149,18 +214,18 @@ export default function Home() {
 
                         {/* ---------- Add New Design ---------- */}
                         <div className="w-full lg:w-2/3 flex flex-col">
-                            <h2 className="text-2xl font-bold mb-6">افزودن طرح جدید</h2>
+                            <h2 className="text-2xl font-bold mb-6">{editMode ? "ویرایش طرح" : "ایجاد طرح جدید"}</h2>
 
                             {/* Design Name */}
                             <div className="form-control mb-6">
                                 <label className="label mb-1.5">
-                                    <span className="label-text font-medium">نام یا کد طرح</span>
+                                    <span className="label-text font-medium">نام طرح</span>
                                 </label>
                                 <input
                                     type="text"
                                     className="input input-bordered w-full"
-                                    value={designName}
-                                    onChange={(e) => setDesignName(e.target.value)}
+                                    value={name}
+                                    onChange={(e) => handleDesignNameChange(e.target.value)}
                                 />
                             </div>
 
@@ -171,11 +236,11 @@ export default function Home() {
                                 </label>
                                 <label
                                     className={`border-2 border-dashed rounded-lg p-6 text-center flex flex-col items-center justify-center cursor-pointer transition 
-          ${mainPreview ? "border-gray-400 bg-gray-100" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
+              ${mainPreview ? "border-gray-400 bg-gray-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
                                 >
                                     {!mainPreview ? (
                                         <>
-                                            <FaImage className="text-5xl text-gray-400 mb-3"/>
+                                            <FaImage className="text-5xl text-gray-400 mb-3" />
                                             <p className="text-gray-600 mb-2">کلیک کنید یا تصویر را بکشید</p>
                                             <input
                                                 type="file"
@@ -196,11 +261,10 @@ export default function Home() {
                                                 className="absolute top-1 right-1 btn btn-circle"
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setMainImage(null);
-                                                    setMainPreview(null);
+                                                    setDesignForm(prev => ({ ...prev, mainImage: null, mainPreview: null }));
                                                 }}
                                             >
-                                                <FaTrash className="text-error"/>
+                                                <FaTrash className="text-error" />
                                             </button>
                                         </div>
                                     )}
@@ -213,7 +277,7 @@ export default function Home() {
                                     <span className="label-text font-medium">تصاویر فیس‌ها</span>
                                 </label>
                                 <label className="btn btn-primary w-full">
-                                    <FaUpload className="ml-2"/> افزودن فیس
+                                    <FaUpload className="ml-2" /> افزودن فیس
                                     <input
                                         type="file"
                                         accept="image/*"
@@ -234,7 +298,7 @@ export default function Home() {
                                                     className="absolute top-1 right-1 btn btn-circle !bg-none !border-none"
                                                     onClick={() => removeFace(face.id)}
                                                 >
-                                                    <FaTrash className="text-error"/>
+                                                    <FaTrash className="text-error" />
                                                 </button>
                                             </div>
                                         ))}
@@ -251,12 +315,10 @@ export default function Home() {
 
                         {/* ---------- Labels Management ---------- */}
                         <div className="flex flex-col w-full lg:w-1/3">
-                            <h1 className="text-xl font-bold mb-6">مدیریت لیبل‌ها</h1>
+                            <h1 className="text-xl font-bold mb-6">مدیریت لیبل ها</h1>
 
-                            {LabelsIsLoading && (
-                                <p className="text-gray-500">در حال بارگذاری...</p>
-                            )}
-                            {LabelsIsError && <p className="text-red-500">خطا در دریافت داده‌ها!</p>}
+                            {LabelsIsLoading && <p className="text-gray-500">Loading...</p>}
+                            {LabelsIsError && <p className="text-red-500">Error fetching data!</p>}
 
                             {/* Label Values Selection */}
                             <div className="form-control mb-6 overflow-y-auto">
@@ -269,13 +331,13 @@ export default function Home() {
                                                     className="btn btn-square text-blue-500"
                                                     onClick={() => setEditingLabel(label)}
                                                 >
-                                                    <CiEdit className="text-2xl"/>
+                                                    <CiEdit className="text-2xl" />
                                                 </button>
                                                 <button
                                                     className="btn btn-square text-red-500"
                                                     onClick={() => setDeleteConfirmId(label.id ?? null)}
                                                 >
-                                                    <FaTrash size={16}/>
+                                                    <FaTrash size={16} />
                                                 </button>
                                             </div>
                                         </div>
@@ -289,20 +351,7 @@ export default function Home() {
                                                         type="checkbox"
                                                         className="checkbox checkbox-primary checkbox-sm"
                                                         checked={selectedLabelValueIds.includes(value.id!)}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                                setSelectedLabelValueIds([
-                                                                    ...selectedLabelValueIds,
-                                                                    value.id!,
-                                                                ]);
-                                                            } else {
-                                                                setSelectedLabelValueIds(
-                                                                    selectedLabelValueIds.filter(
-                                                                        (id) => id !== value.id
-                                                                    )
-                                                                );
-                                                            }
-                                                        }}
+                                                        onChange={(e) => toggleLabelValue(value.id!, e.target.checked)}
                                                     />
                                                     <span className="text-sm">{value.faName} ({value.enName})</span>
                                                 </label>
@@ -313,10 +362,18 @@ export default function Home() {
                             </div>
                         </div>
                     </div>
-                    {/* Save Button */}
-                    <div className="flex justify-end mt-6">
+
+                    {/* Save Buttons */}
+                    <div className="flex justify-end mt-6 gap-2">
                         <button onClick={handleSaveDesign} className="btn btn-primary px-6">
-                            ایجاد طرح جدید
+                            {editMode ? "ویرایش طرح" : "ایجاد طرح جدید"}
+                        </button>
+                        <button
+                            onClick={handleCancelEdit}
+                            className="btn btn-error px-6"
+                            hidden={!editMode}
+                        >
+                            انصراف
                         </button>
                     </div>
                 </div>
@@ -329,15 +386,15 @@ export default function Home() {
                             <th>#</th>
                             <th>نام طرح</th>
                             <th>تصویر اصلی</th>
-                            <th>تعداد فیس‌ها</th>
-                            <th>لیبل‌ها</th>
+                            <th>تعداد فیس ها</th>
+                            <th>لیبل ها</th>
                             <th>تاریخ ایجاد</th>
                             <th>آخرین ویرایش</th>
                             <th>عملیات</th>
                         </tr>
                         </thead>
                         <tbody>
-                        {DesignData && DesignData?.length > 0 &&
+                        {DesignData && DesignData.length > 0 &&
                             DesignData.map((design: any, index: number) => (
                                 <tr key={index}>
                                     <th>{index + 1}</th>
@@ -345,7 +402,7 @@ export default function Home() {
                                     <td>
                                         <div className="avatar">
                                             <div className="mask mask-squircle h-12 w-12">
-                                                <img src={design.mainImage} alt="design"/>
+                                                <img src={design.mainImage} alt="design" />
                                             </div>
                                         </div>
                                     </td>
@@ -367,13 +424,13 @@ export default function Home() {
                                             className="btn btn-square btn-ghost text-blue-500"
                                             onClick={() => handleEditDesign(design)}
                                         >
-                                            <CiEdit className="text-lg"/>
+                                            <CiEdit className="text-lg" />
                                         </button>
                                         <button
                                             className="btn btn-square btn-ghost text-red-500"
                                             onClick={() => setDeleteDesignId(design.id)}
                                         >
-                                            <FaTrash size={13}/>
+                                            <FaTrash size={13} />
                                         </button>
                                     </td>
                                 </tr>
@@ -382,7 +439,6 @@ export default function Home() {
                     </table>
                 </div>
             </div>
-
 
             {/* ---------- Delete Modal ---------- */}
             <input
@@ -395,10 +451,10 @@ export default function Home() {
             <div className="modal">
                 <div className="modal-box">
                     <h3 className="font-bold text-lg">
-                        حذف {deleteDesignId ? "طرح" : "لیبل"}
+                        Delete {deleteDesignId ? "Design" : "Label"}
                     </h3>
                     <p className="py-4 text-gray-600">
-                        آیا مطمئن هستید که می‌خواهید این مورد را حذف کنید؟ این عمل قابل بازگشت نیست.
+                        Are you sure you want to delete this item? This action cannot be undone.
                     </p>
                     <div className="modal-action">
                         <button
@@ -408,7 +464,7 @@ export default function Home() {
                                 setDeleteDesignId(null);
                             }}
                         >
-                            انصراف
+                            Cancel
                         </button>
                         <button
                             className="btn btn-error"
@@ -417,7 +473,7 @@ export default function Home() {
                                 if (deleteDesignId) {
                                     deleteDesign.mutate(deleteDesignId, {
                                         onSuccess: () => {
-                                            toast.success("طرح با موفقیت حذف شد");
+                                            toast.success("Design deleted successfully");
                                             DesignRefetch();
                                             setDeleteDesignId(null);
                                         },
@@ -425,175 +481,66 @@ export default function Home() {
                                 }
                             }}
                         >
-                            حذف
+                            Delete
                         </button>
                     </div>
                 </div>
             </div>
 
-
             {/* ---------- Edit Label Modal ---------- */}
-            <input type="checkbox" id="update-modal" className="modal-toggle" checked={editingLabel !== null} readOnly/>
+            <input type="checkbox" id="update-modal" className="modal-toggle" checked={editingLabel !== null} readOnly />
             <div className="modal">
                 <div className="modal-box max-w-3xl">
-                    <h3 className="font-bold text-xl mb-4">ویرایش لیبل</h3>
+                    <h3 className="font-bold text-xl mb-4">Edit Label</h3>
                     {editingLabel && (
                         <div className="space-y-4">
                             <input
                                 type="text"
                                 className="input input-bordered w-full"
                                 value={editingLabel.name}
-                                onChange={e => setEditingLabel({...editingLabel, name: e.target.value})}
-                                placeholder="نام لیبل"
+                                onChange={e => setEditingLabel({ ...editingLabel, name: e.target.value })}
+                                placeholder="Label Name"
                             />
                             {editingLabel.values.map((value, index) => (
                                 <div key={index} className="flex gap-2 items-center">
                                     <input
                                         className="input input-bordered w-full"
-                                        placeholder="نام فارسی"
+                                        placeholder="Persian Name"
                                         value={value.faName}
                                         onChange={e => {
                                             const newValues = [...editingLabel.values];
                                             newValues[index].faName = e.target.value;
-                                            setEditingLabel({...editingLabel, values: newValues});
+                                            setEditingLabel({ ...editingLabel, values: newValues });
                                         }}
                                     />
                                     <input
                                         className="input input-bordered w-full"
-                                        placeholder="نام لاتین"
+                                        placeholder="English Name"
                                         value={value.enName}
                                         onChange={e => {
                                             const newValues = [...editingLabel.values];
                                             newValues[index].enName = e.target.value;
-                                            setEditingLabel({...editingLabel, values: newValues});
+                                            setEditingLabel({ ...editingLabel, values: newValues });
                                         }}
                                     />
                                     <button className="btn btn-error btn-sm btn-square" onClick={() => {
                                         const newValues = editingLabel.values.filter((_, i) => i !== index);
-                                        setEditingLabel({...editingLabel, values: newValues});
+                                        setEditingLabel({ ...editingLabel, values: newValues });
                                     }}>
-                                        <FaTrash size={14}/>
+                                        <FaTrash size={14} />
                                     </button>
                                 </div>
                             ))}
                             <button className="btn btn-outline btn-primary mt-2" onClick={() => setEditingLabel({
                                 ...editingLabel,
-                                values: [...editingLabel.values, {faName: "", enName: ""}]
-                            })}>افزودن مقدار جدید
+                                values: [...editingLabel.values, { faName: "", enName: "" }]
+                            })}>Add New Value
                             </button>
                         </div>
                     )}
                     <div className="modal-action mt-4">
-                        <button className="btn btn-ghost" onClick={() => setEditingLabel(null)}>انصراف</button>
-                        <button className="btn btn-primary"
-                                onClick={() => editingLabel && handleSaveLabel(editingLabel)}>ذخیره تغییرات
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* ---------- Edit Design Modal ---------- */}
-            <input
-                type="checkbox"
-                id="update-design-modal"
-                className="modal-toggle"
-                checked={editingDesign !== null}
-                readOnly
-            />
-            <div className="modal">
-                <div className="modal-box max-w-3xl">
-                    <h3 className="font-bold text-xl mb-4">ویرایش طرح</h3>
-                    {editingDesign && (
-                        <div className="space-y-4">
-                            <input
-                                type="text"
-                                className="input input-bordered w-full"
-                                value={editingDesign.name}
-                                onChange={(e) =>
-                                    setEditingDesign({ ...editingDesign, name: e.target.value })
-                                }
-                                placeholder="نام طرح"
-                            />
-
-                            {/* تصویر فعلی */}
-                            <div className="flex items-center gap-4">
-                                <img
-                                    src={editingDesign.mainImage}
-                                    alt="main"
-                                    className="w-24 h-24 rounded-lg object-cover border"
-                                />
-                                <label className="btn btn-outline btn-primary cursor-pointer">
-                                    تغییر تصویر
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            if (!e.target.files?.[0]) return;
-                                            const file = e.target.files[0];
-                                            setEditingDesign({
-                                                ...editingDesign,
-                                                newMainImage: file,
-                                                mainImagePreview: URL.createObjectURL(file),
-                                            });
-                                        }}
-                                    />
-                                </label>
-                            </div>
-
-                            {/* فیس‌ها */}
-                            <div>
-                                <p className="font-medium mb-2">تعداد فیس‌ها: {editingDesign.faceCount}</p>
-                                <label className="btn btn-outline btn-primary cursor-pointer">
-                                    افزودن فیس جدید
-                                    <input
-                                        type="file"
-                                        accept="image/*"
-                                        multiple
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            if (!e.target.files) return;
-                                            const files = Array.from(e.target.files);
-                                            setEditingDesign({
-                                                ...editingDesign,
-                                                newFaces: files,
-                                            });
-                                        }}
-                                    />
-                                </label>
-                            </div>
-                        </div>
-                    )}
-                    <div className="modal-action mt-4">
-                        <button
-                            className="btn btn-ghost"
-                            onClick={() => setEditingDesign(null)}
-                        >
-                            انصراف
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            onClick={async () => {
-                                if (!editingDesign) return;
-                                const formData = new FormData();
-                                formData.append("id", editingDesign.id);
-                                formData.append("name", editingDesign.name);
-                                if (editingDesign.newMainImage)
-                                    formData.append("mainImage", editingDesign.newMainImage);
-                                if (editingDesign.newFaces) {
-                                    editingDesign.newFaces.forEach((file: File) =>
-                                        formData.append("faces", file)
-                                    );
-                                }
-
-                                await upsertDesign.mutateAsync(formData);
-                                toast.success("تغییرات طرح ذخیره شد ✅");
-                                setEditingDesign(null);
-                                DesignRefetch();
-                            }}
-                        >
-                            ذخیره تغییرات
-                        </button>
+                        <button className="btn btn-ghost" onClick={() => setEditingLabel(null)}>Cancel</button>
+                        <button className="btn btn-primary" onClick={() => editingLabel && handleSaveLabel(editingLabel)}>Save Changes</button>
                     </div>
                 </div>
             </div>
