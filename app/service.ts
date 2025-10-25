@@ -24,13 +24,6 @@ export function useService() {
         },
     });
 
-    const deleteLabel = useMutation({
-        mutationFn: async (id: number) => {
-            const res = await axios.delete("/api/labels", { data: { id } });
-            return res.data;
-        },
-    });
-
     // GET all designs
     const getDesigns = useQuery({
         queryKey: ["designs"],
@@ -70,5 +63,5 @@ export function useService() {
     });
 
 
-    return {getLabels, deleteLabel , updateLabel , upsertDesign , deleteDesign , getDesigns};
+    return {getLabels , updateLabel , upsertDesign , deleteDesign , getDesigns};
 }
