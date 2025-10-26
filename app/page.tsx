@@ -37,6 +37,7 @@ export default function Home() {
     const [designId, setDesignId] = useState<number | null>(null);
     const [editMode, setEditMode] = useState<boolean | null>(null);
     const [deleteDesignId, setDeleteDesignId] = useState<number | null>(null);
+    const [tempLabels, setTempLabels] = useState<Label[]>([]);
 
     // ---------- React Hook Form Setup ----------
     const { register, handleSubmit, watch, setValue, reset, control } = useForm({
@@ -123,9 +124,38 @@ export default function Home() {
                 if (face.file) formData.append("faces", face.file);
             });
 
-            data.selectedLabelValueIds.forEach((id: number) =>
-                formData.append("labelValueIds", id.toString())
-            );
+            // Convert selected label value IDs to the expected labels structure
+            const selectedLabels = LabelsData?.filter((label: Label) =>
+                label.values.some((value) => data.selectedLabelValueIds.includes(value.id!))
+            ).map((label: Label) => ({
+                name: label.name,
+                values: label.values.filter((value) =>
+                    data.selectedLabelValueIds.includes(value.id!)
+                ).map((value) => ({
+                    id: value.id,
+                    faName: value.faName,
+                    enName: value.enName
+                }))
+            })) || [];
+
+            // Also include temporary labels that were selected (for display purposes)
+            const selectedTempLabels = tempLabels?.filter((label: Label) =>
+                label.values.some((value) => data.selectedLabelValueIds.includes(value.id!))
+            ).map((label: Label) => ({
+                name: label.name,
+                values: label.values.filter((value) =>
+                    data.selectedLabelValueIds.includes(value.id!)
+                ).map((value) => ({
+                    id: value.id,
+                    faName: value.faName,
+                    enName: value.enName
+                }))
+            })) || [];
+
+            // Combine both existing and temporary labels
+            const allSelectedLabels = [...selectedLabels, ...selectedTempLabels];
+
+            formData.append("labelsJson", JSON.stringify(allSelectedLabels));
 
             await upsertDesign.mutateAsync(formData);
 
@@ -135,6 +165,7 @@ export default function Home() {
             // Reset form state
             setEditMode(false);
             setDesignId(null);
+            setTempLabels([]);
             reset({
                 name: "",
                 size: "",
@@ -158,6 +189,43 @@ export default function Home() {
     const handleEditDesign = (design: any) => {
         setDesignId(design.id);
         setEditMode(true);
+
+        // Extract label value IDs from labelsJson
+        const selectedLabelValueIds = design.labelsJson?.flatMap((label: any) =>
+            label.values?.map((value: any) => value.id)
+        ).filter(Boolean) || [];
+
+        // Create temporary labels for display if they don't exist in current database
+        const tempLabels = design.labelsJson?.map((labelData: any) => {
+            // Check if this label exists in current LabelsData
+            const existingLabel = LabelsData?.find((l: Label) => l.name === labelData.name);
+
+            if (existingLabel) {
+                // Label exists, use existing data
+                return existingLabel;
+            } else {
+                // Label doesn't exist, create temporary label for display only
+                return {
+                    id: `temp_${Date.now()}_${Math.random()}`,
+                    name: labelData.name,
+                    values: labelData.values?.map((value: any) => ({
+                        id: value.id || `temp_value_${Date.now()}_${Math.random()}`,
+                        faName: value.faName,
+                        enName: value.enName,
+                        labelId: `temp_${Date.now()}_${Math.random()}`
+                    })) || [],
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+            }
+        }) || [];
+
+        // Store temporary labels for display
+        const filteredTempLabels = tempLabels.filter((tempLabel: any) =>
+            !LabelsData?.some((existing: Label) => existing.name === tempLabel.name)
+        );
+        setTempLabels(filteredTempLabels);
+
         reset({
             name: design.name,
             size: design.size || "",
@@ -168,8 +236,9 @@ export default function Home() {
                 id: img.id || Date.now(),
                 preview: img.url,
             })),
-            selectedLabelValueIds: design.labels.map((l: any) => l.labelValue.id),
+            selectedLabelValueIds: selectedLabelValueIds,
         });
+
         toast("Edit mode activated 📝", {icon: "✏️"});
     };
 
@@ -177,6 +246,7 @@ export default function Home() {
     const handleCancelEdit = () => {
         setEditMode(false);
         setDesignId(null);
+        setTempLabels([]);
         reset({
             name: "",
             size: "",
@@ -334,37 +404,48 @@ export default function Home() {
 
                             {/* Label Values Selection */}
                             <div className="form-control mb-6 overflow-y-auto">
-                                {LabelsData?.map((label: Label) => (
-                                    <div key={label.id} className="mb-4 bg-gray-50 rounded-lg p-4">
-                                        <div className={"flex items-center justify-between mb-3"}>
-                                            <p className="font-semibold text-gray-700 mb-2">{label.name}</p>
-                                            <div className="flex gap-2">
-                                                <button
-                                                    className="btn btn-square text-blue-500"
-                                                    onClick={() => setEditingLabel(label)}
-                                                >
-                                                    <CiEdit className="text-2xl"/>
-                                                </button>
+                                {/* Combine existing labels with temporary labels for display */}
+                                {(() => {
+                                    const allLabels = [...(LabelsData || []), ...tempLabels];
+                                    return allLabels?.map((label: Label) => (
+                                        <div key={label.id} className="mb-4 bg-gray-50 rounded-lg p-4">
+                                            <div className={"flex items-center justify-between mb-3"}>
+                                                <p className="font-semibold text-gray-700 mb-2">{label.name}</p>
+                                                <div className="flex gap-2">
+                                                    {/* Only show edit button for existing labels, not temporary ones */}
+                                                    {!label.id?.toString().startsWith('temp_') && (
+                                                        <button
+                                                            className="btn btn-square text-blue-500"
+                                                            onClick={() => setEditingLabel(label)}
+                                                        >
+                                                            <CiEdit className="text-2xl"/>
+                                                        </button>
+                                                    )}
+                                                    {/* Show indicator for temporary labels */}
+                                                    {label.id?.toString().startsWith('temp_') && (
+                                                        <span className="badge badge-warning badge-sm">قدیمی</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {label.values?.map((value) => (
+                                                    <label
+                                                        key={value.id}
+                                                        className="flex items-center gap-2 cursor-pointer"
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            className="checkbox checkbox-primary checkbox-sm"
+                                                            checked={selectedLabelValueIds.includes(value.id!)}
+                                                            onChange={(e) => toggleLabelValue(value.id!, e.target.checked)}
+                                                        />
+                                                        <span className="text-sm">{value.faName} ({value.enName})</span>
+                                                    </label>
+                                                ))}
                                             </div>
                                         </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {label.values?.map((value) => (
-                                                <label
-                                                    key={value.id}
-                                                    className="flex items-center gap-2 cursor-pointer"
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        className="checkbox checkbox-primary checkbox-sm"
-                                                        checked={selectedLabelValueIds.includes(value.id!)}
-                                                        onChange={(e) => toggleLabelValue(value.id!, e.target.checked)}
-                                                    />
-                                                    <span className="text-sm">{value.faName} ({value.enName})</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
+                                    ));
+                                })()}
                             </div>
                         </div>
                     </div>
@@ -419,12 +500,16 @@ export default function Home() {
                                     </td>
                                     <td>{design.faceCount}</td>
                                     <td className="flex flex-wrap gap-1">
-                                        {design.labels.map((label: any, i: number) => (
-                                            <div
-                                                key={i}
-                                                className="badge badge-soft badge-info text-xs text-nowrap"
-                                            >
-                                                {`${label.labelValue.enName} (${label.labelValue.faName})`}
+                                        {design?.labelsJson?.map((label: any, i: number) => (
+                                            <div key={i} className="flex flex-wrap gap-1">
+                                                {label?.values?.map((value: any, j: number) => (
+                                                    <div
+                                                        key={`${i}-${j}`}
+                                                        className="badge badge-soft badge-info text-xs text-nowrap"
+                                                    >
+                                                        {`${value?.enName} (${value?.faName})`}
+                                                    </div>
+                                                ))}
                                             </div>
                                         ))}
                                     </td>

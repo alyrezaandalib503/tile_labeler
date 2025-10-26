@@ -61,32 +61,27 @@ export async function POST(req: Request) {
             .getAll("faces")
             .filter((f) => f instanceof File) as File[];
 
-        // ✅ خواندن داده‌ی لیبل‌ها از JSON
         const labelsJsonRaw = formData.get("labelsJson")?.toString();
         const labelsJson = labelsJsonRaw ? JSON.parse(labelsJsonRaw) : [];
 
-        // 📂 ایجاد فولدر مخصوص طرح
         const folderPath = path.join(BASE_DIR, `${name}_${size}`);
         if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
 
-        // 🖼 ذخیره تصویر اصلی
         const mainExt = getExt(mainImageFile.type);
-        const mainFilename = `main.${mainExt}`;
+        const mainFilename = `${name}_${size}_main.${mainExt}`;
         const mainPath = path.join(folderPath, mainFilename);
         fs.writeFileSync(mainPath, Buffer.from(await mainImageFile.arrayBuffer()));
         const mainImageUrl = `/images/designs/${name}_${size}/${mainFilename}`;
 
-        // 🖼 ذخیره فیس‌ها
         const imageUrls: { index: number; url: string }[] = [];
         for (let i = 0; i < faceFiles.length; i++) {
             const f = faceFiles[i];
             const ext = getExt(f.type);
-            const filename = `face_${i + 1}.${ext}`;
+            const filename = `${name}_${size}_face_${i + 1}.${ext}`;
             fs.writeFileSync(path.join(folderPath, filename), Buffer.from(await f.arrayBuffer()));
             imageUrls.push({ index: i + 1, url: `/images/designs/${name}_${size}/${filename}` });
         }
 
-        // 💾 ذخیره در دیتابیس
         const design = await prisma.design.create({
             data: {
                 name,
@@ -99,6 +94,18 @@ export async function POST(req: Request) {
             },
             include: { images: true },
         });
+
+        // json
+        const metadata = {
+            id: design.id,
+            name: design.name,
+            size: design.size,
+            code: design.code,
+            labels: design.labelsJson || [],
+        };
+
+        const metadataPath = path.join(folderPath, `${name}_${size}_metadata.json`);
+        fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
 
         return NextResponse.json(design);
     } catch (error: any) {
@@ -120,7 +127,10 @@ export async function PUT(req: Request) {
         if (!id)
             return NextResponse.json({ error: "Design ID is required" }, { status: 400 });
 
-        const existing = await prisma.design.findUnique({ where: { id }, include: { images: true } });
+        const existing = await prisma.design.findUnique({
+            where: { id },
+            include: { images: true },
+        });
         if (!existing)
             return NextResponse.json({ error: "Design not found" }, { status: 404 });
 
@@ -134,33 +144,35 @@ export async function PUT(req: Request) {
             .filter((f) => f instanceof File) as File[];
 
         const labelsJsonRaw = formData.get("labelsJson")?.toString();
-        const labelsJson = labelsJsonRaw ? JSON.parse(labelsJsonRaw) : existing.labelsJson;
+        const labelsJson = labelsJsonRaw
+            ? JSON.parse(labelsJsonRaw)
+            : existing.labelsJson;
 
         const folderPath = path.join(BASE_DIR, `${name}_${size}`);
         if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
 
         let mainImageUrl = existing.mainImage;
 
-        // 🔄 اگر تصویر اصلی جدید آمده بود، جایگزین کن
         if (mainImageFile instanceof File) {
             const ext = getExt(mainImageFile.type);
-            const filename = `main.${ext}`;
+            const filename = `${name}_${size}_main.${ext}`;
             const filePath = path.join(folderPath, filename);
             fs.writeFileSync(filePath, Buffer.from(await mainImageFile.arrayBuffer()));
             mainImageUrl = `/images/designs/${name}_${size}/${filename}`;
         }
 
-        // 🔄 فیس‌های جدید
         const newImages: { index: number; url: string }[] = [];
         for (let i = 0; i < faceFiles.length; i++) {
             const f = faceFiles[i];
             const ext = getExt(f.type);
-            const filename = `face_${i + 1}.${ext}`;
+            const filename = `${name}_${size}_face_${i + 1}.${ext}`;
             fs.writeFileSync(path.join(folderPath, filename), Buffer.from(await f.arrayBuffer()));
-            newImages.push({ index: i + 1, url: `/images/designs/${name}_${size}/${filename}` });
+            newImages.push({
+                index: i + 1,
+                url: `/images/designs/${name}_${size}/${filename}`,
+            });
         }
 
-        // 💾 بروزرسانی در دیتابیس
         const updated = await prisma.design.update({
             where: { id },
             data: {
@@ -179,6 +191,17 @@ export async function PUT(req: Request) {
             include: { images: true },
         });
 
+        const metadata = {
+            id: updated.id,
+            name: updated.name,
+            size: updated.size,
+            code: updated.code,
+            labels: updated.labelsJson || [],
+        };
+
+        const metadataPath = path.join(folderPath, `${name}_${size}_metadata.json`);
+        fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
+
         return NextResponse.json(updated);
     } catch (error: any) {
         console.error("❌ PUT /api/designs error:", error);
@@ -196,22 +219,30 @@ export async function DELETE(req: Request) {
     try {
         const { searchParams } = new URL(req.url);
         const id = Number(searchParams.get("id"));
-        if (!id)
+
+        if (!id) {
             return NextResponse.json({ error: "Design ID is required" }, { status: 400 });
+        }
 
         const design = await prisma.design.findUnique({ where: { id } });
-        if (!design)
+        if (!design) {
             return NextResponse.json({ error: "Design not found" }, { status: 404 });
+        }
 
-        // حذف از دیتابیس
-        await prisma.design.delete({ where: { id } });
-
-        // حذف فولدر مربوط به طرح
         const folderName = `${design.name}_${design.size}`;
         const folderPath = path.join(BASE_DIR, folderName);
-        if (fs.existsSync(folderPath)) fs.rmSync(folderPath, { recursive: true, force: true });
 
-        return NextResponse.json({ message: "Design deleted successfully" });
+        await prisma.design.delete({ where: { id } });
+
+        try {
+            // @ts-ignore
+            await fs.rm(folderPath, { recursive: true, force: true });
+            console.log(`🗑️ Folder deleted: ${folderPath}`);
+        } catch (fileErr) {
+            console.warn(`⚠️ Failed to delete folder ${folderPath}:`, fileErr);
+        }
+
+        return NextResponse.json({ message: "✅ Design deleted successfully" });
     } catch (error: any) {
         console.error("❌ DELETE /api/designs error:", error);
         return NextResponse.json(
@@ -220,3 +251,4 @@ export async function DELETE(req: Request) {
         );
     }
 }
+

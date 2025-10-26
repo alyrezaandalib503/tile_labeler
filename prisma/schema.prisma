@@ -9,11 +9,11 @@ datasource db {
 }
 
 model Label {
-  id        Int           @id @default(autoincrement())
-  name      String        @unique
+  id        Int          @id @default(autoincrement())
+  name      String       @unique
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
   values    LabelValue[]
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
 }
 
 model LabelValue {
@@ -21,9 +21,9 @@ model LabelValue {
   faName    String
   enName    String
   labelId   Int
-  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  label     Label    @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@index([labelId])
 }
@@ -35,19 +35,19 @@ model Design {
   size       String
   faceCount  Int
   mainImage  String
-  images     DesignImage[]
-  labelsJson Json @default("[]")
+  labelsJson Json          @default("[]")
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
+  images     DesignImage[]
 }
 
 model DesignImage {
-  id       Int     @id @default(autoincrement())
+  id       Int    @id @default(autoincrement())
   designId Int
-  index    Int     // شماره فیس برای نامگذاری: face_{index}
-  url      String  // مسیر ذخیره تصویر: folder/name_face_{index}.png
-  design   Design  @relation(fields: [designId], references: [id], onDelete: Cascade)
+  index    Int
+  url      String
+  design   Design @relation(fields: [designId], references: [id], onDelete: Cascade)
 
+  @@unique([designId, index])
   @@index([designId])
-  @@unique([designId, index]) // هر فیس یک index یکتا برای هر طرح
 }
