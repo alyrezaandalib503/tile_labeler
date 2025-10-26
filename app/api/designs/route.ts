@@ -1,21 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
-import path from "path";
+import { 
+    DESIGNS_CONFIG, 
+    getFileExtension, 
+    getFilePath, 
+    getFileUrl, 
+    getFolderName 
+} from "@/app/lib/designs-config";
 import fs from "fs";
-
-// 🧩 ابزار کمکی برای تعیین پسوند فایل بر اساس MIME type
-const getExt = (mime: string) => {
-    const map: Record<string, string> = {
-        "image/jpeg": "jpg",
-        "image/png": "png",
-        "image/webp": "webp",
-        "image/avif": "avif",
-    };
-    return map[mime] || "jpg";
-};
-
-// 🧩 مسیر پوشه ذخیره‌سازی طرح‌ها
-const BASE_DIR = path.join(process.cwd(), "public/images/designs");
+import path from "path";
 
 // ========================
 // 🟢 GET — دریافت همه طرح‌ها
@@ -64,22 +57,22 @@ export async function POST(req: Request) {
         const labelsJsonRaw = formData.get("labelsJson")?.toString();
         const labelsJson = labelsJsonRaw ? JSON.parse(labelsJsonRaw) : [];
 
-        const folderPath = path.join(BASE_DIR, `${name}_${size}`);
+        const folderPath = getFilePath(getFolderName(name, size), "");
         if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
 
-        const mainExt = getExt(mainImageFile.type);
+        const mainExt = getFileExtension(mainImageFile.type);
         const mainFilename = `${name}_${size}_main.${mainExt}`;
-        const mainPath = path.join(folderPath, mainFilename);
+        const mainPath = getFilePath(getFolderName(name, size), mainFilename);
         fs.writeFileSync(mainPath, Buffer.from(await mainImageFile.arrayBuffer()));
-        const mainImageUrl = `/images/designs/${name}_${size}/${mainFilename}`;
+        const mainImageUrl = getFileUrl(getFolderName(name, size), mainFilename);
 
         const imageUrls: { index: number; url: string }[] = [];
         for (let i = 0; i < faceFiles.length; i++) {
             const f = faceFiles[i];
-            const ext = getExt(f.type);
+            const ext = getFileExtension(f.type);
             const filename = `${name}_${size}_face_${i + 1}.${ext}`;
-            fs.writeFileSync(path.join(folderPath, filename), Buffer.from(await f.arrayBuffer()));
-            imageUrls.push({ index: i + 1, url: `/images/designs/${name}_${size}/${filename}` });
+            fs.writeFileSync(getFilePath(getFolderName(name, size), filename), Buffer.from(await f.arrayBuffer()));
+            imageUrls.push({ index: i + 1, url: getFileUrl(getFolderName(name, size), filename) });
         }
 
         const design = await prisma.design.create({
@@ -104,7 +97,7 @@ export async function POST(req: Request) {
             labels: design.labelsJson || [],
         };
 
-        const metadataPath = path.join(folderPath, `${name}_${size}_metadata.json`);
+        const metadataPath = getFilePath(getFolderName(name, size), `${name}_${size}_metadata.json`);
         fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
 
         return NextResponse.json(design);
@@ -153,8 +146,8 @@ export async function PUT(req: Request) {
 
         // بررسی آیا نام یا سایز تغییر کرده است
         const nameOrSizeChanged = name !== existing.name || size !== existing.size;
-        const oldFolderPath = path.join(BASE_DIR, `${existing.name}_${existing.size}`);
-        const newFolderPath = path.join(BASE_DIR, `${name}_${size}`);
+        const oldFolderPath = getFilePath(getFolderName(existing.name, existing.size), "");
+        const newFolderPath = getFilePath(getFolderName(name, size), "");
 
         // ایجاد فولدر جدید
         if (!fs.existsSync(newFolderPath)) {
@@ -167,15 +160,15 @@ export async function PUT(req: Request) {
         if (nameOrSizeChanged) {
             // کپی کردن تصویر اصلی
             if (existing.mainImage) {
-                const oldMainImagePath = path.join(process.cwd(), "public", existing.mainImage);
+                const oldMainImagePath = path.join(process.cwd(), existing.mainImage.startsWith("/uploads/") ? existing.mainImage.substring(1) : `public${existing.mainImage}`);
                 if (fs.existsSync(oldMainImagePath)) {
                     const ext = path.extname(existing.mainImage).substring(1) || 'jpg';
                     const newMainFilename = `${name}_${size}_main.${ext}`;
-                    const newMainPath = path.join(newFolderPath, newMainFilename);
+                    const newMainPath = getFilePath(getFolderName(name, size), newMainFilename);
                     
                     try {
                         fs.copyFileSync(oldMainImagePath, newMainPath);
-                        mainImageUrl = `/images/designs/${name}_${size}/${newMainFilename}`;
+                        mainImageUrl = getFileUrl(getFolderName(name, size), newMainFilename);
                         console.log(`📁 Main image copied to new folder: ${newMainPath}`);
                     } catch (fileErr) {
                         console.warn(`⚠️ Failed to copy main image:`, fileErr);
@@ -185,11 +178,11 @@ export async function PUT(req: Request) {
 
             // کپی کردن تصاویر فیس
             existing.images.forEach((img, index) => {
-                const oldFaceImagePath = path.join(process.cwd(), "public", img.url);
+                const oldFaceImagePath = path.join(process.cwd(), img.url.startsWith("/uploads/") ? img.url.substring(1) : `public${img.url}`);
                 if (fs.existsSync(oldFaceImagePath)) {
                     const ext = path.extname(img.url).substring(1) || 'jpg';
                     const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
-                    const newFacePath = path.join(newFolderPath, newFaceFilename);
+                    const newFacePath = getFilePath(getFolderName(name, size), newFaceFilename);
                     
                     try {
                         fs.copyFileSync(oldFaceImagePath, newFacePath);
@@ -205,7 +198,7 @@ export async function PUT(req: Request) {
         if (mainImageFile instanceof File) {
             // پاک کردن تصویر اصلی قبلی (اگر در همان فولدر باشد)
             if (existing.mainImage && !nameOrSizeChanged) {
-                const oldMainImagePath = path.join(process.cwd(), "public", existing.mainImage);
+                const oldMainImagePath = path.join(process.cwd(), existing.mainImage.startsWith("/uploads/") ? existing.mainImage.substring(1) : `public${existing.mainImage}`);
                 if (fs.existsSync(oldMainImagePath)) {
                     try {
                         fs.unlinkSync(oldMainImagePath);
@@ -216,11 +209,11 @@ export async function PUT(req: Request) {
                 }
             }
 
-            const ext = getExt(mainImageFile.type);
+            const ext = getFileExtension(mainImageFile.type);
             const filename = `${name}_${size}_main.${ext}`;
-            const filePath = path.join(newFolderPath, filename);
+            const filePath = getFilePath(getFolderName(name, size), filename);
             fs.writeFileSync(filePath, Buffer.from(await mainImageFile.arrayBuffer()));
-            mainImageUrl = `/images/designs/${name}_${size}/${filename}`;
+            mainImageUrl = getFileUrl(getFolderName(name, size), filename);
         }
 
         // مدیریت تصاویر فیس
@@ -231,7 +224,7 @@ export async function PUT(req: Request) {
             // پاک کردن تصاویر فیس قبلی (فقط اگر در همان فولدر باشند)
             if (!nameOrSizeChanged) {
                 existing.images.forEach((img) => {
-                    const oldFaceImagePath = path.join(process.cwd(), "public", img.url);
+                    const oldFaceImagePath = path.join(process.cwd(), img.url.startsWith("/uploads/") ? img.url.substring(1) : `public${img.url}`);
                     if (fs.existsSync(oldFaceImagePath)) {
                         try {
                             fs.unlinkSync(oldFaceImagePath);
@@ -260,7 +253,7 @@ export async function PUT(req: Request) {
                 // پاک کردن تصاویر اضافی
                 const imagesToDelete = existing.images.slice(remainingFacesCount);
                 imagesToDelete.forEach((img) => {
-                    const oldFaceImagePath = path.join(process.cwd(), "public", img.url);
+                    const oldFaceImagePath = path.join(process.cwd(), img.url.startsWith("/uploads/") ? img.url.substring(1) : `public${img.url}`);
                     if (fs.existsSync(oldFaceImagePath)) {
                         try {
                             fs.unlinkSync(oldFaceImagePath);
@@ -278,7 +271,7 @@ export async function PUT(req: Request) {
                     const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
                     newImages.push({
                         index: index + 1,
-                        url: `/images/designs/${name}_${size}/${newFaceFilename}`,
+                        url: getFileUrl(getFolderName(name, size), newFaceFilename),
                     });
                 });
             }
@@ -288,12 +281,12 @@ export async function PUT(req: Request) {
                 const startIndex = newImages.length + 1;
                 for (let i = 0; i < faceFiles.length; i++) {
                     const f = faceFiles[i];
-                    const ext = getExt(f.type);
+                    const ext = getFileExtension(f.type);
                     const filename = `${name}_${size}_face_${startIndex + i}.${ext}`;
-                    fs.writeFileSync(path.join(newFolderPath, filename), Buffer.from(await f.arrayBuffer()));
+                    fs.writeFileSync(getFilePath(getFolderName(name, size), filename), Buffer.from(await f.arrayBuffer()));
                     newImages.push({
                         index: startIndex + i,
-                        url: `/images/designs/${name}_${size}/${filename}`,
+                        url: getFileUrl(getFolderName(name, size), filename),
                     });
                 }
             }
@@ -315,7 +308,7 @@ export async function PUT(req: Request) {
                     const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
                     newImages.push({
                         index: index + 1,
-                        url: `/images/designs/${name}_${size}/${newFaceFilename}`,
+                        url: getFileUrl(getFolderName(name, size), newFaceFilename),
                     });
                 });
             }
@@ -324,12 +317,12 @@ export async function PUT(req: Request) {
             const startIndex = newImages.length + 1;
             for (let i = 0; i < faceFiles.length; i++) {
                 const f = faceFiles[i];
-                const ext = getExt(f.type);
+                const ext = getFileExtension(f.type);
                 const filename = `${name}_${size}_face_${startIndex + i}.${ext}`;
-                fs.writeFileSync(path.join(newFolderPath, filename), Buffer.from(await f.arrayBuffer()));
+                fs.writeFileSync(getFilePath(getFolderName(name, size), filename), Buffer.from(await f.arrayBuffer()));
                 newImages.push({
                     index: startIndex + i,
-                    url: `/images/designs/${name}_${size}/${filename}`,
+                    url: getFileUrl(getFolderName(name, size), filename),
                 });
             }
         }
@@ -383,7 +376,7 @@ export async function PUT(req: Request) {
             labels: updated.labelsJson || [],
         };
 
-        const metadataPath = path.join(newFolderPath, `${name}_${size}_metadata.json`);
+        const metadataPath = getFilePath(getFolderName(name, size), `${name}_${size}_metadata.json`);
         fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
 
         // در انتها فولدر قدیمی را پاک کن (اگر نام یا سایز تغییر کرده باشد)
@@ -425,7 +418,7 @@ export async function DELETE(req: Request) {
         }
 
         const folderName = `${design.name}_${design.size}`;
-        const folderPath = path.join(BASE_DIR, folderName);
+        const folderPath = getFilePath(folderName, "");
 
         await prisma.design.delete({ where: { id } });
 

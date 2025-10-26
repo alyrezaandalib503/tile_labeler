@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/app/lib/prisma";
+import { DESIGNS_CONFIG, getFilePath, getFolderName } from "@/app/lib/designs-config";
+import fs from "fs";
 
 // CREATE
 export async function POST(request: Request) {
@@ -223,12 +225,9 @@ async function updateDesignsUsingLabel(oldLabel: any, newLabel: any) {
 // Helper function to update the metadata JSON file
 async function updateDesignMetadataFile(design: any, updatedLabelsJson: any[]) {
     try {
-        const path = require('path');
-        const fs = require('fs');
-        
-        const folderName = `${design.name}_${design.size}`;
-        const folderPath = path.join(process.cwd(), "public/images/designs", folderName);
-        const metadataPath = path.join(folderPath, `${design.name}_${design.size}_metadata.json`);
+        const folderName = getFolderName(design.name, design.size);
+        const folderPath = getFilePath(folderName, "");
+        const metadataPath = getFilePath(folderName, `${design.name}_${design.size}_metadata.json`);
         
         if (fs.existsSync(metadataPath)) {
             const metadata = {
