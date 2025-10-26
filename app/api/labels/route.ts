@@ -194,7 +194,7 @@ async function updateDesignsUsingLabel(oldLabel: any, newLabel: any) {
                             enName: oldValue.enName
                         };
                     }
-                }).filter(value => value); // Remove any undefined values
+                }).filter((value: any) => value); // Remove any undefined values
 
                 // Update the label values in the design's labelsJson
                 const updatedLabelsJson = [...labelsJson];
