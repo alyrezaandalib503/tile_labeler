@@ -1,6 +1,6 @@
 "use client";
 
-import {ChangeEvent, useState} from "react";
+import {ChangeEvent, useRef, useState} from "react";
 import {useForm, useFieldArray} from "react-hook-form";
 import Header from "@/components/layout/header/header";
 import {toast} from "react-hot-toast";
@@ -70,7 +70,9 @@ export default function Home() {
             {
                 onSuccess: () => {
                     LabelsRefetch();
+                    DesignRefetch(); // Also refresh designs to show updated labels
                     setEditingLabel(null);
+                    toast.success("لیبل و طرح‌های مرتبط با موفقیت به‌روزرسانی شدند ✨");
                 },
             }
         );
@@ -119,9 +121,29 @@ export default function Home() {
 
             if (data.mainImage instanceof File) formData.append("mainImage", data.mainImage);
 
+            // ارسال تمام تصاویر فیس (شامل تصاویر جدید و موجود)
             data.faces.forEach((face: DesignFace) => {
                 if (face.file) formData.append("faces", face.file);
             });
+
+            // اگر در حالت ویرایش هستیم، اطلاعات دقیق‌تری ارسال کن
+            if (editMode && designId) {
+                const existingDesign = DesignData?.find((d: any) => d.id === designId);
+                
+                if (existingDesign) {
+                    // اگر تعداد فیس‌ها کاهش یافته، مشخص کن که آیا همه حذف شده‌اند یا نه
+                    if (existingDesign.faceCount > data.faces.length) {
+                        if (data.faces.length === 0) {
+                            // همه فیس‌ها حذف شده‌اند
+                            formData.append("facesRemoved", "true");
+                        } else {
+                            // فقط برخی فیس‌ها حذف شده‌اند
+                            formData.append("facesPartiallyRemoved", "true");
+                            formData.append("remainingFacesCount", data.faces.length.toString());
+                        }
+                    }
+                }
+            }
 
             // Convert selected label value IDs to the expected labels structure
             const selectedLabels = LabelsData?.filter((label: Label) =>
@@ -258,6 +280,19 @@ export default function Home() {
         toast("Edit mode deactivated 📝", {icon: "✏️"});
     };
 
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const handleRemove = (e: any) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        setValue("mainImage", null);
+        setValue("mainPreview", null);
+
+        // 👇 پاک کردن مقدار input تا بتوان دوباره همان فایل را آپلود کرد
+        if (inputRef.current) {
+            inputRef.current.value = "";
+        }
+    };
     // ---------- Render ----------
     return (
         <div className="bg-gray-100 min-h-screen w-full">
@@ -288,12 +323,14 @@ export default function Home() {
                                     <label className="label mb-1.5">
                                         <span className="label-text font-medium">سایز</span>
                                     </label>
-                                    <input
-                                        type="text"
-                                        className="input input-bordered w-full"
-                                        {...register("size")}
-                                    />
+                                    <select {...register("size")} defaultValue="Pick a color" className="select">
+                                        <option disabled={true}>سایزی را انتخاب کنید</option>
+                                        <option>60x60</option>
+                                        <option>50x50</option>
+                                        <option>45x45</option>
+                                    </select>
                                 </div>
+
                                 <div className="form-control mb-6 w-full">
                                     <label className="label mb-1.5">
                                         <span className="label-text font-medium">کد طرح</span>
@@ -310,49 +347,46 @@ export default function Home() {
                                 <label className="label mb-1.5">
                                     <span className="label-text font-medium">تصویر اصلی طرح</span>
                                 </label>
+
                                 <input
                                     id="mainImageInput"
+                                    ref={inputRef} // ✅
                                     type="file"
                                     accept="image/*"
                                     className="hidden"
                                     onChange={handleMainImage}
                                 />
+
                                 <label
                                     htmlFor="mainImageInput"
                                     className={`border-2 border-dashed rounded-lg p-6 text-center flex flex-col items-center justify-center cursor-pointer transition 
-                                    ${mainPreview ? "border-gray-400 bg-gray-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
+        ${mainPreview ? "border-gray-400 bg-gray-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
                                 >
                                     {!mainPreview ? (
                                         <>
-                                            <FaImage className="text-5xl text-gray-400 mb-3"/>
+                                            <FaImage className="text-5xl text-gray-400 mb-3" />
                                             <p className="text-gray-600 mb-2">کلیک کنید یا تصویر را بکشید</p>
                                         </>
                                     ) : (
                                         <div
                                             className="relative w-full h-76"
-                                            onClick={(e) => e.stopPropagation()} // جلوگیری از کلیک روی preview
+                                            onClick={(e) => e.stopPropagation()}
                                         >
-                                            {/* نمایش تصویر */}
                                             <img
                                                 src={mainPreview}
                                                 alt="Main"
-                                                className="w-full h-full object-contain rounded-lg"
+                                                className="w-full h-full object-contain rounded-lg cursor-default"
                                             />
                                             <button
                                                 type="button"
                                                 className="absolute top-1 right-1 btn btn-circle"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setValue("mainImage", null);
-                                                    setValue("mainPreview", null);
-                                                }}
+                                                onClick={handleRemove}
                                             >
-                                                <FaTrash className="text-error"/>
+                                                <FaTrash className="text-error" />
                                             </button>
                                         </div>
                                     )}
                                 </label>
-
                             </div>
 
                             {/* Face Images Upload */}

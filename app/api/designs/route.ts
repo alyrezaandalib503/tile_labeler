@@ -142,34 +142,217 @@ export async function PUT(req: Request) {
         const faceFiles = formData
             .getAll("faces")
             .filter((f) => f instanceof File) as File[];
+        const facesRemoved = formData.get("facesRemoved")?.toString() === "true";
+        const facesPartiallyRemoved = formData.get("facesPartiallyRemoved")?.toString() === "true";
+        const remainingFacesCount = Number(formData.get("remainingFacesCount")?.toString()) || 0;
 
         const labelsJsonRaw = formData.get("labelsJson")?.toString();
         const labelsJson = labelsJsonRaw
             ? JSON.parse(labelsJsonRaw)
             : existing.labelsJson;
 
-        const folderPath = path.join(BASE_DIR, `${name}_${size}`);
-        if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
+        // بررسی آیا نام یا سایز تغییر کرده است
+        const nameOrSizeChanged = name !== existing.name || size !== existing.size;
+        const oldFolderPath = path.join(BASE_DIR, `${existing.name}_${existing.size}`);
+        const newFolderPath = path.join(BASE_DIR, `${name}_${size}`);
+
+        // ایجاد فولدر جدید
+        if (!fs.existsSync(newFolderPath)) {
+            fs.mkdirSync(newFolderPath, { recursive: true });
+        }
 
         let mainImageUrl = existing.mainImage;
 
+        // اگر نام یا سایز تغییر کرده، تصاویر موجود را کپی کن
+        if (nameOrSizeChanged) {
+            // کپی کردن تصویر اصلی
+            if (existing.mainImage) {
+                const oldMainImagePath = path.join(process.cwd(), "public", existing.mainImage);
+                if (fs.existsSync(oldMainImagePath)) {
+                    const ext = path.extname(existing.mainImage).substring(1) || 'jpg';
+                    const newMainFilename = `${name}_${size}_main.${ext}`;
+                    const newMainPath = path.join(newFolderPath, newMainFilename);
+                    
+                    try {
+                        fs.copyFileSync(oldMainImagePath, newMainPath);
+                        mainImageUrl = `/images/designs/${name}_${size}/${newMainFilename}`;
+                        console.log(`📁 Main image copied to new folder: ${newMainPath}`);
+                    } catch (fileErr) {
+                        console.warn(`⚠️ Failed to copy main image:`, fileErr);
+                    }
+                }
+            }
+
+            // کپی کردن تصاویر فیس
+            existing.images.forEach((img, index) => {
+                const oldFaceImagePath = path.join(process.cwd(), "public", img.url);
+                if (fs.existsSync(oldFaceImagePath)) {
+                    const ext = path.extname(img.url).substring(1) || 'jpg';
+                    const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
+                    const newFacePath = path.join(newFolderPath, newFaceFilename);
+                    
+                    try {
+                        fs.copyFileSync(oldFaceImagePath, newFacePath);
+                        console.log(`📁 Face image copied to new folder: ${newFacePath}`);
+                    } catch (fileErr) {
+                        console.warn(`⚠️ Failed to copy face image:`, fileErr);
+                    }
+                }
+            });
+        }
+
+        // اگر تصویر اصلی جدید آپلود شده، تصویر قبلی را پاک کن و تصویر جدید را ذخیره کن
         if (mainImageFile instanceof File) {
+            // پاک کردن تصویر اصلی قبلی (اگر در همان فولدر باشد)
+            if (existing.mainImage && !nameOrSizeChanged) {
+                const oldMainImagePath = path.join(process.cwd(), "public", existing.mainImage);
+                if (fs.existsSync(oldMainImagePath)) {
+                    try {
+                        fs.unlinkSync(oldMainImagePath);
+                        console.log(`🗑️ Old main image deleted: ${oldMainImagePath}`);
+                    } catch (fileErr) {
+                        console.warn(`⚠️ Failed to delete old main image ${oldMainImagePath}:`, fileErr);
+                    }
+                }
+            }
+
             const ext = getExt(mainImageFile.type);
             const filename = `${name}_${size}_main.${ext}`;
-            const filePath = path.join(folderPath, filename);
+            const filePath = path.join(newFolderPath, filename);
             fs.writeFileSync(filePath, Buffer.from(await mainImageFile.arrayBuffer()));
             mainImageUrl = `/images/designs/${name}_${size}/${filename}`;
         }
 
+        // مدیریت تصاویر فیس
         const newImages: { index: number; url: string }[] = [];
-        for (let i = 0; i < faceFiles.length; i++) {
-            const f = faceFiles[i];
-            const ext = getExt(f.type);
-            const filename = `${name}_${size}_face_${i + 1}.${ext}`;
-            fs.writeFileSync(path.join(folderPath, filename), Buffer.from(await f.arrayBuffer()));
-            newImages.push({
-                index: i + 1,
-                url: `/images/designs/${name}_${size}/${filename}`,
+        
+        // اگر همه تصاویر حذف شده‌اند
+        if (facesRemoved) {
+            // پاک کردن تصاویر فیس قبلی (فقط اگر در همان فولدر باشند)
+            if (!nameOrSizeChanged) {
+                existing.images.forEach((img) => {
+                    const oldFaceImagePath = path.join(process.cwd(), "public", img.url);
+                    if (fs.existsSync(oldFaceImagePath)) {
+                        try {
+                            fs.unlinkSync(oldFaceImagePath);
+                            console.log(`🗑️ Old face image deleted: ${oldFaceImagePath}`);
+                        } catch (fileErr) {
+                            console.warn(`⚠️ Failed to delete old face image ${oldFaceImagePath}:`, fileErr);
+                        }
+                    }
+                });
+            }
+            // newImages خالی می‌ماند (همه تصاویر حذف شده‌اند)
+        }
+        // اگر فقط برخی تصاویر حذف شده‌اند (حذف جزئی)
+        else if (facesPartiallyRemoved) {
+            // ابتدا تصاویر موجود را نگه دار (فقط تعداد مشخص شده)
+            if (!nameOrSizeChanged) {
+                // نگه داشتن فقط تعداد مشخص شده از تصاویر موجود
+                const imagesToKeep = existing.images.slice(0, remainingFacesCount);
+                imagesToKeep.forEach((img) => {
+                    newImages.push({
+                        index: img.index,
+                        url: img.url,
+                    });
+                });
+                
+                // پاک کردن تصاویر اضافی
+                const imagesToDelete = existing.images.slice(remainingFacesCount);
+                imagesToDelete.forEach((img) => {
+                    const oldFaceImagePath = path.join(process.cwd(), "public", img.url);
+                    if (fs.existsSync(oldFaceImagePath)) {
+                        try {
+                            fs.unlinkSync(oldFaceImagePath);
+                            console.log(`🗑️ Old face image deleted: ${oldFaceImagePath}`);
+                        } catch (fileErr) {
+                            console.warn(`⚠️ Failed to delete old face image ${oldFaceImagePath}:`, fileErr);
+                        }
+                    }
+                });
+            } else {
+                // اگر نام یا سایز تغییر کرده، فقط تعداد مشخص شده را کپی کن
+                const imagesToKeep = existing.images.slice(0, remainingFacesCount);
+                imagesToKeep.forEach((img, index) => {
+                    const ext = path.extname(img.url).substring(1) || 'jpg';
+                    const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
+                    newImages.push({
+                        index: index + 1,
+                        url: `/images/designs/${name}_${size}/${newFaceFilename}`,
+                    });
+                });
+            }
+
+            // سپس تصاویر جدید را اضافه کن (اگر وجود دارند)
+            if (faceFiles.length > 0) {
+                const startIndex = newImages.length + 1;
+                for (let i = 0; i < faceFiles.length; i++) {
+                    const f = faceFiles[i];
+                    const ext = getExt(f.type);
+                    const filename = `${name}_${size}_face_${startIndex + i}.${ext}`;
+                    fs.writeFileSync(path.join(newFolderPath, filename), Buffer.from(await f.arrayBuffer()));
+                    newImages.push({
+                        index: startIndex + i,
+                        url: `/images/designs/${name}_${size}/${filename}`,
+                    });
+                }
+            }
+        }
+        // اگر تصاویر فیس جدید آپلود شده‌اند (بدون حذف)
+        else if (faceFiles.length > 0) {
+            // ابتدا تصاویر موجود را نگه دار (اگر نام یا سایز تغییر نکرده)
+            if (!nameOrSizeChanged) {
+                existing.images.forEach((img) => {
+                    newImages.push({
+                        index: img.index,
+                        url: img.url,
+                    });
+                });
+            } else {
+                // اگر نام یا سایز تغییر کرده، تصاویر کپی شده را اضافه کن
+                existing.images.forEach((img, index) => {
+                    const ext = path.extname(img.url).substring(1) || 'jpg';
+                    const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
+                    newImages.push({
+                        index: index + 1,
+                        url: `/images/designs/${name}_${size}/${newFaceFilename}`,
+                    });
+                });
+            }
+
+            // سپس تصاویر جدید را اضافه کن
+            const startIndex = newImages.length + 1;
+            for (let i = 0; i < faceFiles.length; i++) {
+                const f = faceFiles[i];
+                const ext = getExt(f.type);
+                const filename = `${name}_${size}_face_${startIndex + i}.${ext}`;
+                fs.writeFileSync(path.join(newFolderPath, filename), Buffer.from(await f.arrayBuffer()));
+                newImages.push({
+                    index: startIndex + i,
+                    url: `/images/designs/${name}_${size}/${filename}`,
+                });
+            }
+        }
+        // اگر فقط نام یا سایز تغییر کرده و تصاویر فیس جدیدی آپلود نشده
+        else if (nameOrSizeChanged) {
+            // تصاویر کپی شده در فولدر جدید موجود هستند، فقط مسیرها را به‌روزرسانی کن
+            existing.images.forEach((img, index) => {
+                const ext = path.extname(img.url).substring(1) || 'jpg';
+                const newFaceFilename = `${name}_${size}_face_${index + 1}.${ext}`;
+                newImages.push({
+                    index: index + 1,
+                    url: `/images/designs/${name}_${size}/${newFaceFilename}`,
+                });
+            });
+        }
+        // اگر هیچ تغییری در تصاویر فیس نبوده
+        else {
+            // تصاویر موجود را نگه دار
+            existing.images.forEach((img) => {
+                newImages.push({
+                    index: img.index,
+                    url: img.url,
+                });
             });
         }
 
@@ -181,7 +364,8 @@ export async function PUT(req: Request) {
                 size,
                 mainImage: mainImageUrl,
                 labelsJson,
-                images: newImages.length
+                faceCount: facesRemoved ? 0 : newImages.length,
+                images: (faceFiles.length > 0 || facesRemoved || facesPartiallyRemoved || nameOrSizeChanged)
                     ? {
                         deleteMany: { designId: id },
                         create: newImages,
@@ -199,8 +383,19 @@ export async function PUT(req: Request) {
             labels: updated.labelsJson || [],
         };
 
-        const metadataPath = path.join(folderPath, `${name}_${size}_metadata.json`);
+        const metadataPath = path.join(newFolderPath, `${name}_${size}_metadata.json`);
         fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
+
+        // در انتها فولدر قدیمی را پاک کن (اگر نام یا سایز تغییر کرده باشد)
+        if (nameOrSizeChanged && fs.existsSync(oldFolderPath)) {
+            try {
+                // @ts-ignore
+                await fs.rm(oldFolderPath, { recursive: true, force: true });
+                console.log(`🗑️ Old folder deleted: ${oldFolderPath}`);
+            } catch (fileErr) {
+                console.warn(`⚠️ Failed to delete old folder ${oldFolderPath}:`, fileErr);
+            }
+        }
 
         return NextResponse.json(updated);
     } catch (error: any) {
