@@ -18,7 +18,7 @@ export default function RootLayout({
 
             {/* react-hot-toast */}
             <Toaster
-                position="top-center"
+                position="top-left"
                 reverseOrder={false}
                 toastOptions={{
                     duration: 3000,

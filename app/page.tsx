@@ -40,7 +40,7 @@ export default function Home() {
     const [tempLabels, setTempLabels] = useState<Label[]>([]);
 
     // ---------- React Hook Form Setup ----------
-    const { register, handleSubmit, watch, setValue, reset, control } = useForm({
+    const {register, handleSubmit, watch, setValue, reset, control} = useForm({
         defaultValues: {
             name: "",
             size: "",
@@ -52,13 +52,13 @@ export default function Home() {
         }
     });
 
-    const { fields: faceFields, append: appendFace, remove: removeFace } = useFieldArray({
+    const {fields: faceFields, append: appendFace, remove: removeFace} = useFieldArray({
         control,
         name: "faces"
     });
 
     const watchedValues = watch();
-    const { name, size, code, mainPreview, faces, selectedLabelValueIds } = watchedValues;
+    const {name, size, code, mainPreview, faces, selectedLabelValueIds} = watchedValues;
 
     // Label save
     const handleSaveLabel = (label: Label) => {
@@ -94,7 +94,6 @@ export default function Home() {
         }));
         newFaces.forEach(face => appendFace(face));
     };
-
 
     // Toggle label selection
     const toggleLabelValue = (id: number, checked: boolean) => {
@@ -311,23 +310,29 @@ export default function Home() {
                                 <label className="label mb-1.5">
                                     <span className="label-text font-medium">تصویر اصلی طرح</span>
                                 </label>
+                                <input
+                                    id="mainImageInput"
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleMainImage}
+                                />
                                 <label
+                                    htmlFor="mainImageInput"
                                     className={`border-2 border-dashed rounded-lg p-6 text-center flex flex-col items-center justify-center cursor-pointer transition 
-              ${mainPreview ? "border-gray-400 bg-gray-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
+                                    ${mainPreview ? "border-gray-400 bg-gray-50" : "border-gray-300 bg-gray-50 hover:bg-gray-100"}`}
                                 >
                                     {!mainPreview ? (
                                         <>
                                             <FaImage className="text-5xl text-gray-400 mb-3"/>
                                             <p className="text-gray-600 mb-2">کلیک کنید یا تصویر را بکشید</p>
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                className="hidden"
-                                                onChange={handleMainImage}
-                                            />
                                         </>
                                     ) : (
-                                        <div className="relative w-full h-76">
+                                        <div
+                                            className="relative w-full h-76"
+                                            onClick={(e) => e.stopPropagation()} // جلوگیری از کلیک روی preview
+                                        >
+                                            {/* نمایش تصویر */}
                                             <img
                                                 src={mainPreview}
                                                 alt="Main"
@@ -347,6 +352,7 @@ export default function Home() {
                                         </div>
                                     )}
                                 </label>
+
                             </div>
 
                             {/* Face Images Upload */}
@@ -393,10 +399,10 @@ export default function Home() {
 
                         {/* ---------- Labels Management ---------- */}
                         <div className="flex flex-col w-full lg:w-1/3 max-h-[650px]">
-                         <div className={"flex items-center justify-between mb-6"}>
-                             <h1 className="text-xl font-bold">مدیریت لیبل ها</h1>
-                             <AddLabel/>
-                         </div>
+                            <div className={"flex items-center justify-between mb-6"}>
+                                <h1 className="text-xl font-bold">مدیریت لیبل ها</h1>
+                                <AddLabel/>
+                            </div>
 
                             {LabelsIsLoading && <p className="text-gray-500">Loading...</p>}
                             {LabelsIsError && <p className="text-red-500">خطا در دریافت دیتا.</p>}
